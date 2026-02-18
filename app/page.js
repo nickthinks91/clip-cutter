@@ -359,25 +359,17 @@ export default function App() {
         {page === "home" && <div>
           <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>{isLeader ? "Your Songs" : "Assigned Songs"}</h2>
           {isLeader && <div style={{ marginBottom: 20 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 12, alignItems: "center" }}>
-              <div onDrop={handleUpload} onDragOver={e => e.preventDefault()} onClick={() => document.getElementById("fi2").click()} style={{ border: "2px dashed rgba(0,240,255,0.15)", borderRadius: 12, padding: "20px 16px", textAlign: "center", cursor: "pointer", background: "rgba(0,240,255,0.01)", minHeight: 100, display: "flex", flexDirection: "column", justifyContent: "center" }}>
-                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 3 }}>Upload audio</div>
-                <div style={{ fontSize: 10, color: "#7a7a8e" }}>Drop file or click</div>
-                <input id="fi2" type="file" accept="audio/*" onChange={handleUpload} style={{ display: "none" }} />
-              </div>
-              <div style={{ fontSize: 11, color: "#555", fontFamily: "monospace" }}>or</div>
-              <div style={{ border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, padding: "12px 14px", background: "rgba(255,255,255,0.015)" }}>
-                <input type="text" value={linkSongName} onChange={e => setLinkSongName(e.target.value)} placeholder="Song name" style={{ width: "100%", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 6, padding: "6px 10px", color: "#e8e8f0", fontSize: 11, outline: "none", marginBottom: 6, boxSizing: "border-box" }} />
-                <input type="text" value={shareLink} onChange={e => setShareLink(e.target.value)} placeholder="Dropbox / Drive link" style={{ width: "100%", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 6, padding: "6px 10px", color: "#e8e8f0", fontSize: 11, outline: "none", marginBottom: 6, boxSizing: "border-box" }} />
-                <button onClick={createSongFromLink} disabled={!shareLink.trim() || !linkSongName.trim()} style={{ ...bs(shareLink.trim() && linkSongName.trim()), width: "100%", padding: "6px", fontSize: 10 }}>Add Song</button>
-              </div>
+            <div onDrop={handleUpload} onDragOver={e => e.preventDefault()} onClick={() => document.getElementById("fi2").click()} style={{ border: "2px dashed rgba(0,240,255,0.15)", borderRadius: 12, padding: "24px 16px", textAlign: "center", cursor: "pointer", background: "rgba(0,240,255,0.01)" }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 3 }}>Upload audio</div>
+              <div style={{ fontSize: 10, color: "#7a7a8e" }}>Drop file or click · MP3, WAV, M4A, AAC, OGG, FLAC</div>
+              <input id="fi2" type="file" accept="audio/*" onChange={handleUpload} style={{ display: "none" }} />
             </div>
           </div>}
           {analyzing && <div style={{ textAlign: "center", padding: 30 }}><div style={{ width: 36, height: 36, border: "3px solid rgba(0,240,255,0.12)", borderTop: "3px solid #00f0ff", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 12px" }} /><div style={{ fontSize: 12, color: "#7a7a8e" }}>Analyzing & uploading...</div></div>}
           {songs.length === 0 && !analyzing && <div style={{ textAlign: "center", padding: 40, border: "1px dashed rgba(255,255,255,0.06)", borderRadius: 12 }}><div style={{ fontSize: 28, opacity: 0.3, marginBottom: 8 }}>📂</div><div style={{ color: "#555", fontSize: 12 }}>{isLeader ? "Upload a song to get started" : "No songs assigned yet"}</div></div>}
           <div style={{ display: "grid", gap: 8 }}>{songs.map(song => <div key={song.id} style={{ ...cs(false), display: "flex", alignItems: "center", gap: 12 }} onClick={() => isLeader ? loadReview(song.id) : loadSubmit(song.id)}>
             <div style={{ width: 38, height: 38, borderRadius: 8, background: "linear-gradient(135deg,rgba(0,240,255,0.1),rgba(179,102,255,0.1))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, flexShrink: 0 }}>🎵</div>
-            <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 600, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{song.name}</div><div style={{ fontSize: 10, color: "#7a7a8e", fontFamily: "monospace" }}>{song.duration > 0 ? `${fmt(song.duration)} · ~${song.bpm} BPM` : song.share_link ? "📎 shared link" : "pending"}</div></div>
+            <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 600, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{song.name}</div><div style={{ fontSize: 10, color: "#7a7a8e", fontFamily: "monospace" }}>{song.duration > 0 ? `${fmt(song.duration)} · ~${song.bpm} BPM` : "pending"}</div></div>
             {isLeader && <button onClick={ev => { ev.stopPropagation(); delSong(song.id); }} style={{ background: "rgba(255,51,102,0.05)", border: "1px solid rgba(255,51,102,0.1)", color: "#ff3366", fontSize: 8, padding: "3px 7px", borderRadius: 4, cursor: "pointer", fontFamily: "monospace" }}>Delete</button>}
             <div style={{ fontSize: 10, color: "#00f0ff", fontFamily: "monospace" }}>{isLeader ? "Review →" : "Submit →"}</div>
           </div>)}</div>
@@ -457,7 +449,6 @@ export default function App() {
           <h2 style={{ fontSize: 17, fontWeight: 700, marginBottom: 4 }}>{activeSongData?.name}</h2>
           <p style={{ color: "#7a7a8e", fontSize: 11, marginBottom: 16 }}>Pick 3-5 clips you think would go viral on TikTok</p>
           {!hasAudio && !audioLoading && <div style={{ marginBottom: 16 }}>
-            {activeSongData?.share_link && <a href={activeSongData.share_link} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(0,240,255,0.04)", border: "1px solid rgba(0,240,255,0.15)", borderRadius: 10, padding: "14px 16px", marginBottom: 12, textDecoration: "none", color: "#00f0ff", fontSize: 12, fontWeight: 600 }}><span style={{ fontSize: 18 }}>📁</span><div style={{ flex: 1 }}><div>Download song file</div><div style={{ fontSize: 9, color: "#7a7a8e", fontWeight: 400, marginTop: 2, wordBreak: "break-all" }}>{activeSongData.share_link}</div></div><span>↗</span></a>}
             {!activeSongData?.audio_path && <div onDrop={e => { e.preventDefault(); loadAudioFromFile(e); }} onDragOver={e => e.preventDefault()} onClick={() => document.getElementById("fi3").click()} style={{ border: "2px dashed rgba(0,240,255,0.15)", borderRadius: 10, padding: "20px 16px", textAlign: "center", cursor: "pointer", background: "rgba(0,240,255,0.01)" }}>
               <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 3 }}>Drop or select the audio file</div>
               <div style={{ fontSize: 10, color: "#7a7a8e" }}>MP3, WAV, M4A, AAC, OGG, FLAC</div>

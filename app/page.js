@@ -172,6 +172,7 @@ export default function App() {
   const [notice, setNotice] = useState(null);
   const [shareLink, setShareLink] = useState(""), [linkSongName, setLinkSongName] = useState("");
   const [audioLoading, setAudioLoading] = useState(false);
+  const [lastTapTime, setLastTapTime] = useState(0);
   const [playingFull, setPlayingFull] = useState(false), [fullProgress, setFullProgress] = useState(0);
   const [activeRange, setActiveRange] = useState(null);
 
@@ -394,10 +395,10 @@ export default function App() {
           <div style={{ background: "rgba(0,240,255,0.02)", border: "1px solid rgba(0,240,255,0.06)", borderRadius: 7, padding: "7px 11px", marginBottom: 12, fontSize: 10, color: "#00f0ff" }}>🔒 AI analysis is private — your team won't see these</div>
           {hasAudio && <div style={{ marginBottom: 16 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5, flexWrap: "wrap", gap: 6 }}>
-              <div style={{ fontSize: 8, fontFamily: "monospace", color: "#555", letterSpacing: 1 }}>CLICK = SELECT & DRAG · DOUBLE-CLICK = NEW · DRAG EDGES = RESIZE · SCROLL = ZOOM</div>
+              <button onClick={() => createClip(lastTapTime || (playheadTime || 0), null)} style={{ background: "linear-gradient(135deg,rgba(255,215,0,0.15),rgba(255,215,0,0.05))", border: "1px solid rgba(255,215,0,0.3)", color: "#ffd700", fontSize: 10, fontWeight: 600, padding: "5px 12px", borderRadius: 6, cursor: "pointer", fontFamily: "monospace" }}>+ New Clip</button>
               <div style={{ display: "flex", gap: 3 }}><span style={{ fontSize: 8, fontFamily: "monospace", color: "#555" }}>Default:</span>{[15, 30, 60].map(d => <button key={d} onClick={() => setDefDur(d)} style={{ ...bs(defDur === d), padding: "2px 7px", fontSize: 9 }}>{d}s</button>)}</div>
             </div>
-            <Waveform energy={energy} duration={analysis.duration} clips={clips} highlights={[]} selClip={sel} onSel={setSel} onCreate={createClip} onEdge={dragEdge} onMove={moveClip} zoom={zoom || [0, analysis.duration]} onZoom={setZoom} readonly={false} onPlayFrom={t => playFull(t)} playheadTime={playheadTime} />
+            <Waveform energy={energy} duration={analysis.duration} clips={clips} highlights={[]} selClip={sel} onSel={setSel} onCreate={createClip} onEdge={dragEdge} onMove={moveClip} zoom={zoom || [0, analysis.duration]} onZoom={setZoom} readonly={false} onPlayFrom={t => { setLastTapTime(t); playFull(t); }} playheadTime={playheadTime} />
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, marginBottom: 4 }}>
               <button onClick={() => playFull(0)} style={{ width: 32, height: 32, borderRadius: "50%", background: playingFull ? "linear-gradient(135deg,#ff3366,#ff6644)" : "linear-gradient(135deg,#00f0ff,#0088aa)", border: "none", color: "#fff", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{playingFull ? "■" : "▶"}</button>
               <div style={{ flex: 1, height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}><div style={{ width: `${fullProgress * 100}%`, height: "100%", background: "linear-gradient(90deg,#00f0ff,#b366ff)", transition: "width 0.1s linear" }} /></div>
@@ -431,7 +432,7 @@ export default function App() {
             </div>)}</div>
           </div>}
           {hasAudio && <div style={{ marginBottom: 20 }}>
-            <Waveform energy={energy} duration={analysis.duration} clips={clips} highlights={[...consensus.map((c, i) => ({ startTime: c.startTime, endTime: c.endTime, color: c.agreement >= 0.7 ? "rgba(68,255,136,0.1)" : "rgba(255,215,0,0.06)", label: `C${i + 1} (${c.memberCount}/${c.total})`, lc: c.agreement >= 0.7 ? "rgba(68,255,136,0.5)" : "rgba(255,215,0,0.4)" })), ...(showIndiv ? subs.flatMap(s => (s.clips || []).map(c => ({ startTime: c.startTime, endTime: c.endTime, color: "rgba(179,102,255,0.04)", label: "" }))) : [])]} selClip={sel} onSel={setSel} onCreate={createClip} onEdge={dragEdge} onMove={moveClip} zoom={zoom || [0, analysis.duration]} onZoom={setZoom} readonly={false} onPlayFrom={t => playFull(t)} playheadTime={playheadTime} />
+            <Waveform energy={energy} duration={analysis.duration} clips={clips} highlights={[...consensus.map((c, i) => ({ startTime: c.startTime, endTime: c.endTime, color: c.agreement >= 0.7 ? "rgba(68,255,136,0.1)" : "rgba(255,215,0,0.06)", label: `C${i + 1} (${c.memberCount}/${c.total})`, lc: c.agreement >= 0.7 ? "rgba(68,255,136,0.5)" : "rgba(255,215,0,0.4)" })), ...(showIndiv ? subs.flatMap(s => (s.clips || []).map(c => ({ startTime: c.startTime, endTime: c.endTime, color: "rgba(179,102,255,0.04)", label: "" }))) : [])]} selClip={sel} onSel={setSel} onCreate={createClip} onEdge={dragEdge} onMove={moveClip} zoom={zoom || [0, analysis.duration]} onZoom={setZoom} readonly={false} onPlayFrom={t => { setLastTapTime(t); playFull(t); }} playheadTime={playheadTime} />
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, marginBottom: 4 }}>
               <button onClick={() => playFull(0)} style={{ width: 32, height: 32, borderRadius: "50%", background: playingFull ? "linear-gradient(135deg,#ff3366,#ff6644)" : "linear-gradient(135deg,#00f0ff,#0088aa)", border: "none", color: "#fff", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{playingFull ? "■" : "▶"}</button>
               <div style={{ flex: 1, height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}><div style={{ width: `${fullProgress * 100}%`, height: "100%", background: "linear-gradient(90deg,#00f0ff,#b366ff)", transition: "width 0.1s linear" }} /></div>
@@ -466,17 +467,17 @@ export default function App() {
           {audioLoading && <div style={{ textAlign: "center", padding: 30 }}><div style={{ width: 36, height: 36, border: "3px solid rgba(0,240,255,0.12)", borderTop: "3px solid #00f0ff", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 12px" }} /><div style={{ fontSize: 12, color: "#7a7a8e" }}>Loading song...</div></div>}
           {hasAudio && <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5, flexWrap: "wrap", gap: 4 }}>
-              <div style={{ fontSize: 8, fontFamily: "monospace", color: "#555", letterSpacing: 1 }}>DOUBLE-CLICK = NEW CLIP · DRAG EDGES = RESIZE · DRAG CLIP = MOVE · SCROLL = ZOOM</div>
+              <button onClick={() => createClip(lastTapTime || (playheadTime || 0), null)} style={{ background: "linear-gradient(135deg,rgba(255,215,0,0.15),rgba(255,215,0,0.05))", border: "1px solid rgba(255,215,0,0.3)", color: "#ffd700", fontSize: 11, fontWeight: 600, padding: "6px 14px", borderRadius: 6, cursor: "pointer", fontFamily: "monospace" }}>+ New Clip {lastTapTime > 0 || playheadTime ? `at ${fmt(lastTapTime || playheadTime || 0)}` : ""}</button>
               <div style={{ display: "flex", gap: 2 }}>{[15, 30, 60].map(d => <button key={d} onClick={() => setDefDur(d)} style={{ ...bs(defDur === d), padding: "2px 7px", fontSize: 9 }}>{d}s</button>)}</div>
             </div>
-            <Waveform energy={energy} duration={analysis.duration} clips={clips} highlights={[]} selClip={sel} onSel={setSel} onCreate={createClip} onEdge={dragEdge} onMove={moveClip} zoom={zoom || [0, analysis.duration]} onZoom={setZoom} readonly={false} onPlayFrom={t => playFull(t)} playheadTime={playheadTime} />
+            <Waveform energy={energy} duration={analysis.duration} clips={clips} highlights={[]} selClip={sel} onSel={setSel} onCreate={createClip} onEdge={dragEdge} onMove={moveClip} zoom={zoom || [0, analysis.duration]} onZoom={setZoom} readonly={false} onPlayFrom={t => { setLastTapTime(t); playFull(t); }} playheadTime={playheadTime} />
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, marginBottom: 4 }}>
               <button onClick={() => playFull(0)} style={{ width: 32, height: 32, borderRadius: "50%", background: playingFull ? "linear-gradient(135deg,#ff3366,#ff6644)" : "linear-gradient(135deg,#00f0ff,#0088aa)", border: "none", color: "#fff", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{playingFull ? "■" : "▶"}</button>
               <div style={{ flex: 1, height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}><div style={{ width: `${fullProgress * 100}%`, height: "100%", background: "linear-gradient(90deg,#00f0ff,#b366ff)", transition: "width 0.1s linear" }} /></div>
               <span style={{ fontSize: 10, fontFamily: "monospace", color: "#7a7a8e" }}>{playheadTime != null ? fmt(playheadTime) : "0:00"} / {fmt(analysis.duration)}</span>
             </div>
             <div style={{ fontSize: 9, fontFamily: "monospace", color: "#555", margin: "8px 0 6px", letterSpacing: 1 }}>YOUR PICKS ({clips.length}/5)</div>
-            {clips.length === 0 && <div style={{ textAlign: "center", padding: 20, border: "1px dashed rgba(255,255,255,0.06)", borderRadius: 8, marginBottom: 12 }}><div style={{ fontSize: 10, color: "#7a7a8e" }}>Double-click the waveform to create a clip</div></div>}
+            {clips.length === 0 && <div style={{ textAlign: "center", padding: 20, border: "1px dashed rgba(255,255,255,0.06)", borderRadius: 8, marginBottom: 12 }}><div style={{ fontSize: 10, color: "#7a7a8e" }}>Tap the waveform to set position, then tap "+ New Clip"</div></div>}
             <div style={{ display: "grid", gap: 6, marginBottom: 16 }}>{clips.map((c, idx) => <div key={c.id} onClick={() => setSel(idx)} style={{ ...cs(idx === sel) }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: "#ffd700", minWidth: 20 }}>✎</div>

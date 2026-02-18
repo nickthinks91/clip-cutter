@@ -496,19 +496,28 @@ export default function App() {
 }
 
 function SetupForm({ onSetup }) {
-  const [name, setName] = useState(""), [role, setRole] = useState(null);
+  const [name, setName] = useState(""), [role, setRole] = useState(null), [code, setCode] = useState(""), [codeErr, setCodeErr] = useState(false);
+  const handleSubmit = () => {
+    if (!name.trim() || !role) return;
+    if (role === "leader" && code !== "1234") { setCodeErr(true); return; }
+    onSetup(name, role);
+  };
   return <div>
     <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Your name (e.g. Dylan)" autoFocus style={{ width: "100%", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "12px 14px", color: "#e8e8f0", fontSize: 14, outline: "none", marginBottom: 16 }} />
     <div style={{ fontSize: 11, color: "#7a7a8e", marginBottom: 8, fontFamily: "monospace" }}>I am a:</div>
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
       {[["leader", "👑", "Team Lead", "#ff3366", "Upload, analyze, review picks"], ["member", "🎧", "Team Member", "#00f0ff", "Listen & submit clip picks"]].map(([r, icon, title, color, desc]) =>
-        <div key={r} onClick={() => setRole(r)} style={{ background: role === r ? `rgba(${color === "#ff3366" ? "255,51,102" : "0,240,255"},0.1)` : "rgba(255,255,255,0.02)", border: `2px solid ${role === r ? `rgba(${color === "#ff3366" ? "255,51,102" : "0,240,255"},0.4)` : "rgba(255,255,255,0.06)"}`, borderRadius: 12, padding: 16, cursor: "pointer", textAlign: "center" }}>
+        <div key={r} onClick={() => { setRole(r); setCodeErr(false); }} style={{ background: role === r ? `rgba(${color === "#ff3366" ? "255,51,102" : "0,240,255"},0.1)` : "rgba(255,255,255,0.02)", border: `2px solid ${role === r ? `rgba(${color === "#ff3366" ? "255,51,102" : "0,240,255"},0.4)` : "rgba(255,255,255,0.06)"}`, borderRadius: 12, padding: 16, cursor: "pointer", textAlign: "center" }}>
           <div style={{ fontSize: 24, marginBottom: 6 }}>{icon}</div>
           <div style={{ fontWeight: 700, fontSize: 13, color: role === r ? color : "#ccc" }}>{title}</div>
           <div style={{ fontSize: 10, color: "#7a7a8e", marginTop: 4 }}>{desc}</div>
         </div>
       )}
     </div>
-    <button onClick={() => name.trim() && role && onSetup(name, role)} disabled={!name.trim() || !role} style={{ width: "100%", padding: "12px", borderRadius: 8, border: "none", fontSize: 14, fontWeight: 600, cursor: "pointer", background: name.trim() && role ? "linear-gradient(135deg,#00f0ff,#0088aa)" : "rgba(255,255,255,0.05)", color: name.trim() && role ? "#fff" : "#555" }}>Get Started</button>
+    {role === "leader" && <div style={{ marginBottom: 16 }}>
+      <input type="password" value={code} onChange={e => { setCode(e.target.value); setCodeErr(false); }} placeholder="Enter leader code" style={{ width: "100%", background: "rgba(255,255,255,0.04)", border: `1px solid ${codeErr ? "rgba(255,51,102,0.5)" : "rgba(255,255,255,0.1)"}`, borderRadius: 8, padding: "12px 14px", color: "#e8e8f0", fontSize: 14, outline: "none" }} />
+      {codeErr && <div style={{ fontSize: 10, color: "#ff3366", marginTop: 4, fontFamily: "monospace" }}>Incorrect code</div>}
+    </div>}
+    <button onClick={handleSubmit} disabled={!name.trim() || !role} style={{ width: "100%", padding: "12px", borderRadius: 8, border: "none", fontSize: 14, fontWeight: 600, cursor: "pointer", background: name.trim() && role ? "linear-gradient(135deg,#00f0ff,#0088aa)" : "rgba(255,255,255,0.05)", color: name.trim() && role ? "#fff" : "#555" }}>Get Started</button>
   </div>;
 }

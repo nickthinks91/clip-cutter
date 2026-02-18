@@ -100,15 +100,18 @@ function Waveform({ energy, duration, clips, highlights, selClip, onSel, onCreat
     if (playheadTime != null && playheadTime >= zS && playheadTime <= zE) { const px = t2x(playheadTime, w); ctx.strokeStyle = "#ff3366"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, h); ctx.stroke(); ctx.fillStyle = "#ff3366"; ctx.font = "bold 9px monospace"; ctx.fillText(fmt(playheadTime), px + 4, 12); }
     if (hover !== null && playheadTime == null) { const hx = t2x(hover, w); ctx.strokeStyle = "rgba(255,255,255,0.2)"; ctx.lineWidth = 1; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(hx, 0); ctx.lineTo(hx, h); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = "rgba(255,255,255,0.4)"; ctx.font = "9px monospace"; ctx.fillText(fmt(hover), hx + 3, h - 14); }
   }, [energy, clips, highlights, selClip, duration, zoom, hover, drag, playheadTime]);
-  const gx = e => { const r = ref.current.getBoundingClientRect(); return (e.clientX - r.left) * (800 / r.width); };
-  const findEdge = cx => { if (readonly) return null; for (let i = 0; i < (clips || []).length; i++) { const x1 = t2x(clips[i].startTime, 800), x2 = t2x(clips[i].endTime, 800); if (Math.abs(cx - x1) < 10) return { idx: i, edge: "start" }; if (Math.abs(cx - x2) < 10) return { idx: i, edge: "end" }; } return null; };
+  const gx = e => { const r = ref.current.getBoundingClientRect(); const cx = e.touches ? e.touches[0].clientX : e.clientX; return (cx - r.left) * (800 / r.width); };
+  const findEdge = cx => { if (readonly) return null; const thresh = 'ontouchstart' in window ? 20 : 10; for (let i = 0; i < (clips || []).length; i++) { const x1 = t2x(clips[i].startTime, 800), x2 = t2x(clips[i].endTime, 800); if (Math.abs(cx - x1) < thresh) return { idx: i, edge: "start" }; if (Math.abs(cx - x2) < thresh) return { idx: i, edge: "end" }; } return null; };
   const findClip = cx => { const t = x2t(cx, 800), hits = []; for (let i = 0; i < (clips || []).length; i++) if (t >= clips[i].startTime && t <= clips[i].endTime) hits.push(i); if (!hits.length) return null; if (hits.includes(selClip)) return selClip; return hits[0]; };
   const onDown = e => { if (readonly) return; const x = gx(e); const eh = findEdge(x); if (eh) { setDrag({ type: "edge", ...eh }); return; } const hit = findClip(x); if (hit !== null) { onSel(hit); setDrag({ type: "move", idx: hit, startT: x2t(x, 800), origS: clips[hit].startTime, origE: clips[hit].endTime }); } else if (onPlayFrom) { onPlayFrom(Math.max(0, x2t(x, 800))); } };
   const onMv = e => { const x = gx(e); setHover(x2t(x, 800)); if (drag?.type === "move") { const dt = x2t(x, 800) - drag.startT, cd = drag.origE - drag.origS; let ns = drag.origS + dt, ne = drag.origE + dt; if (ns < 0) { ns = 0; ne = cd; } if (ne > duration) { ne = duration; ns = duration - cd; } onMove(drag.idx, ns, ne); } else if (drag?.type === "edge") onEdge(drag.idx, drag.edge, Math.max(0, Math.min(duration, x2t(x, 800)))); };
   const onUp = () => setDrag(null);
   const onDbl = e => { if (readonly) return; onCreate(Math.max(0, x2t(gx(e), 800)), null); };
   const onWhl = e => { e.preventDefault(); const x = gx(e), p = x2t(x, 800), f = e.deltaY > 0 ? 1.3 : 0.7, nd = Math.max(5, Math.min(duration, zD * f)), r = (p - zS) / zD; let ns = p - r * nd, ne = p + (1 - r) * nd; if (ns < 0) { ne -= ns; ns = 0; } if (ne > duration) { ns -= (ne - duration); ne = duration; } onZoom([Math.max(0, ns), Math.min(duration, ne)]); };
-  return <canvas ref={ref} width={800} height={120} onMouseDown={onDown} onMouseMove={onMv} onMouseUp={onUp} onMouseLeave={() => { setHover(null); setDrag(null); }} onDoubleClick={onDbl} onWheel={onWhl} style={{ width: "100%", height: 120, borderRadius: 10, border: "1px solid rgba(255,255,255,0.06)", cursor: "default", display: "block" }} />;
+  const onTouchStart = e => { e.preventDefault(); onDown(e); };
+  const onTouchMove = e => { e.preventDefault(); onMv(e); };
+  const onTouchEnd = e => { e.preventDefault(); onUp(); };
+  return <canvas ref={ref} width={800} height={120} onMouseDown={onDown} onMouseMove={onMv} onMouseUp={onUp} onMouseLeave={() => { setHover(null); setDrag(null); }} onDoubleClick={onDbl} onWheel={onWhl} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{ width: "100%", height: 120, borderRadius: 10, border: "1px solid rgba(255,255,255,0.06)", cursor: "default", display: "block", touchAction: "none" }} />;
 }
 
 /* ═══ UI ═══ */
@@ -351,14 +354,14 @@ export default function App() {
 
   return (
     <div style={{ minHeight: "100vh", background: "#08080d", color: "#e8e8f0", fontFamily: "'Segoe UI',system-ui,sans-serif" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 18px", borderBottom: "1px solid rgba(255,255,255,0.05)", background: "rgba(255,255,255,0.015)", position: "sticky", top: 0, zIndex: 50 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderBottom: "1px solid rgba(255,255,255,0.05)", background: "rgba(255,255,255,0.015)", position: "sticky", top: 0, zIndex: 50, flexWrap: "wrap", gap: 6 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontSize: 15 }}>🎵</span><span style={{ fontWeight: 700, fontSize: 13 }}>Clip Cutter</span><span style={{ fontFamily: "monospace", fontSize: 8, color: isLeader ? "#ff3366" : "#00f0ff", letterSpacing: 2, background: isLeader ? "rgba(255,51,102,0.1)" : "rgba(0,240,255,0.1)", padding: "2px 6px", borderRadius: 3 }}>{user.role.toUpperCase()}</span></div>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 11, color: "#7a7a8e" }}>{user.name}</span><button onClick={() => setPage("home")} style={bs(page === "home")}>Home</button><button onClick={() => { setUser(null); localStorage.removeItem("cc-user"); setClips([]); setSel(0); setPage("home"); setActiveSong(null); setEnergy([]); setAnalysis(null); setSubmitted(false); setSubs([]); setConsensus([]); stopPlay(); }} style={{ ...bs(false), fontSize: 9, padding: "3px 8px" }}>Logout</button></div>
       </div>
       {notice && <div style={{ position: "fixed", top: 50, left: "50%", transform: "translateX(-50%)", background: "rgba(68,255,136,0.15)", border: "1px solid rgba(68,255,136,0.3)", color: "#44ff88", padding: "8px 20px", borderRadius: 8, fontSize: 12, fontFamily: "monospace", zIndex: 100 }}>{notice}</div>}
       {audioLoading && <div style={{ position: "fixed", top: 50, left: "50%", transform: "translateX(-50%)", background: "rgba(0,240,255,0.1)", border: "1px solid rgba(0,240,255,0.2)", color: "#00f0ff", padding: "8px 20px", borderRadius: 8, fontSize: 12, fontFamily: "monospace", zIndex: 100 }}>Loading audio...</div>}
 
-      <div style={{ maxWidth: 960, margin: "0 auto", padding: "20px 16px 80px" }}>
+      <div style={{ maxWidth: 960, margin: "0 auto", padding: "20px 10px 80px" }}>
 
         {/* HOME */}
         {page === "home" && <div>
@@ -474,13 +477,15 @@ export default function App() {
             </div>
             <div style={{ fontSize: 9, fontFamily: "monospace", color: "#555", margin: "8px 0 6px", letterSpacing: 1 }}>YOUR PICKS ({clips.length}/5)</div>
             {clips.length === 0 && <div style={{ textAlign: "center", padding: 20, border: "1px dashed rgba(255,255,255,0.06)", borderRadius: 8, marginBottom: 12 }}><div style={{ fontSize: 10, color: "#7a7a8e" }}>Double-click the waveform to create a clip</div></div>}
-            <div style={{ display: "grid", gap: 6, marginBottom: 16 }}>{clips.map((c, idx) => <div key={c.id} onClick={() => setSel(idx)} style={{ ...cs(idx === sel), display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#ffd700", minWidth: 24 }}>✎</div>
-              <div style={{ flex: 1, fontSize: 11 }}>{fmt(c.startTime)} → {fmt(c.endTime)} <span style={{ color: "#7a7a8e" }}>({c.dur}s)</span></div>
-              <div style={{ display: "flex", gap: 2 }}>{[15, 30, 60].map(d => <button key={d} onClick={e => { e.stopPropagation(); setClipDur(idx, d); }} style={{ ...bs(c.dur === d), padding: "2px 5px", fontSize: 8 }}>{d}s</button>)}</div>
-              <input type="text" placeholder="Note..." value={c.notes || ""} onChange={e => { e.stopPropagation(); updateNote(idx, e.target.value); }} onClick={e => e.stopPropagation()} style={{ width: 100, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 4, padding: "3px 6px", color: "#ccc", fontSize: 9, outline: "none" }} />
-              <button onClick={e => { e.stopPropagation(); playClip(idx); }} style={{ width: 26, height: 26, borderRadius: "50%", background: playing && sel === idx ? "linear-gradient(135deg,#ff3366,#ff6644)" : "linear-gradient(135deg,#00f0ff,#0088aa)", border: "none", color: "#fff", fontSize: 10, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{playing && sel === idx ? "■" : "▶"}</button>
-              {submitted ? <button onClick={e => { e.stopPropagation(); retractClip(idx); }} style={{ background: "rgba(255,136,68,0.08)", border: "1px solid rgba(255,136,68,0.2)", color: "#ff8844", fontSize: 8, padding: "3px 8px", borderRadius: 4, cursor: "pointer", fontFamily: "monospace" }}>Retract</button> : <button onClick={e => { e.stopPropagation(); delClip(idx); }} style={{ background: "rgba(255,51,102,0.05)", border: "1px solid rgba(255,51,102,0.1)", color: "#ff3366", fontSize: 8, padding: "3px 6px", borderRadius: 4, cursor: "pointer" }}>✕</button>}
+            <div style={{ display: "grid", gap: 6, marginBottom: 16 }}>{clips.map((c, idx) => <div key={c.id} onClick={() => setSel(idx)} style={{ ...cs(idx === sel) }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#ffd700", minWidth: 20 }}>✎</div>
+                <div style={{ flex: "1 1 120px", fontSize: 11, minWidth: 0 }}>{fmt(c.startTime)} → {fmt(c.endTime)} <span style={{ color: "#7a7a8e" }}>({c.dur}s)</span></div>
+                <div style={{ display: "flex", gap: 2 }}>{[15, 30, 60].map(d => <button key={d} onClick={e => { e.stopPropagation(); setClipDur(idx, d); }} style={{ ...bs(c.dur === d), padding: "2px 5px", fontSize: 8 }}>{d}s</button>)}</div>
+                <button onClick={e => { e.stopPropagation(); playClip(idx); }} style={{ width: 26, height: 26, borderRadius: "50%", background: playing && sel === idx ? "linear-gradient(135deg,#ff3366,#ff6644)" : "linear-gradient(135deg,#00f0ff,#0088aa)", border: "none", color: "#fff", fontSize: 10, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{playing && sel === idx ? "■" : "▶"}</button>
+                {submitted ? <button onClick={e => { e.stopPropagation(); retractClip(idx); }} style={{ background: "rgba(255,136,68,0.08)", border: "1px solid rgba(255,136,68,0.2)", color: "#ff8844", fontSize: 8, padding: "3px 8px", borderRadius: 4, cursor: "pointer", fontFamily: "monospace" }}>Retract</button> : <button onClick={e => { e.stopPropagation(); delClip(idx); }} style={{ background: "rgba(255,51,102,0.05)", border: "1px solid rgba(255,51,102,0.1)", color: "#ff3366", fontSize: 8, padding: "3px 6px", borderRadius: 4, cursor: "pointer" }}>✕</button>}
+              </div>
+              {idx === sel && <input type="text" placeholder="Add a note..." value={c.notes || ""} onChange={e => { e.stopPropagation(); updateNote(idx, e.target.value); }} onClick={e => e.stopPropagation()} style={{ width: "100%", marginTop: 6, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 4, padding: "5px 8px", color: "#ccc", fontSize: 10, outline: "none", boxSizing: "border-box" }} />}
             </div>)}</div>
             {submitted && <div style={{ background: "rgba(68,255,136,0.08)", border: "1px solid rgba(68,255,136,0.2)", borderRadius: 8, padding: "10px 14px", textAlign: "center", color: "#44ff88", fontSize: 13, fontWeight: 600, marginBottom: 8 }}>✓ Submitted! Retract individual clips above or add more below.</div>}
             {clips.length < 2 && !submitted && <div style={{ fontSize: 10, color: "#ff8844", fontFamily: "monospace", textAlign: "center", marginBottom: 6 }}>Add at least 2 clips to submit</div>}
@@ -490,7 +495,7 @@ export default function App() {
       </div>
 
       {playing && <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, height: 3, zIndex: 100, background: "rgba(0,240,255,0.08)" }}><div style={{ height: "100%", width: `${progress * 100}%`, background: "linear-gradient(90deg,#00f0ff,#b366ff)", transition: "width 0.1s linear" }} /></div>}
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}*{box-sizing:border-box}button:hover{filter:brightness(1.12)}input:focus{border-color:rgba(0,240,255,0.25)!important}`}</style>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}*{box-sizing:border-box}button:hover{filter:brightness(1.12)}input:focus{border-color:rgba(0,240,255,0.25)!important}html,body{overflow-x:hidden;max-width:100vw}@media(max-width:600px){.clip-row{flex-wrap:wrap!important;gap:4px!important}}`}</style>
     </div>
   );
 }

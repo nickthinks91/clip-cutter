@@ -110,6 +110,19 @@ function Waveform({ energy, duration, clips, highlights, selClip, onSel, onCreat
 /* ═══ UI ═══ */
 function AgreementBar({ count, total }) { const pct = total > 0 ? (count / total) * 100 : 0; const color = pct >= 70 ? "#44ff88" : pct >= 40 ? "#ffd700" : "#ff8844"; return <div style={{ display: "flex", alignItems: "center", gap: 8 }}><div style={{ flex: 1, height: 6, background: "rgba(255,255,255,0.06)", borderRadius: 3, overflow: "hidden" }}><div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: 3 }} /></div><span style={{ fontSize: 11, fontWeight: 700, color, fontFamily: "monospace", minWidth: 40 }}>{count}/{total}</span></div>; }
 
+function MasterPlayer({ playing, progress, duration, onPlay, onSeek }) {
+  const elapsed = duration * progress;
+  return <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8, marginBottom: 8 }}>
+    <button onClick={() => onPlay()} style={{ width: 34, height: 34, borderRadius: "50%", background: playing ? "linear-gradient(135deg,#ff3366,#ff6644)" : "linear-gradient(135deg,#00f0ff,#0088aa)", border: "none", color: "#fff", fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{playing ? "■" : "▶"}</button>
+    <div style={{ flex: 1, cursor: "pointer" }} onClick={e => { const r = e.currentTarget.getBoundingClientRect(); const p = (e.clientX - r.left) / r.width; onSeek(p * duration); }}>
+      <div style={{ height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}>
+        <div style={{ width: `${progress * 100}%`, height: "100%", background: "linear-gradient(90deg,#00f0ff,#b366ff)", borderRadius: 2, transition: "width 0.1s linear" }} />
+      </div>
+    </div>
+    <span style={{ fontSize: 10, fontFamily: "monospace", color: "#7a7a8e", minWidth: 70, textAlign: "right" }}>{fmt(elapsed)} / {fmt(duration)}</span>
+  </div>;
+}
+
 function ClipCard({ c, idx, sel, playing, isModified, bs, onSel, onPlay, onExport, onDur, onNote, onAB, onRevert, onDel, editNote, setEditNote, ab, clips }) {
   const isSel = idx === sel;
   return (
@@ -163,6 +176,7 @@ export default function App() {
   const [notice, setNotice] = useState(null);
   const [shareLink, setShareLink] = useState(""), [linkSongName, setLinkSongName] = useState("");
   const [audioLoading, setAudioLoading] = useState(false);
+  const [playingFull, setPlayingFull] = useState(false), [fullProgress, setFullProgress] = useState(0);
 
   // Load user from localStorage & songs from Supabase
   useEffect(() => {
@@ -256,7 +270,7 @@ export default function App() {
   const isModified = c => !c.isManual && c.origStart != null && (Math.abs(c.startTime - c.origStart) > 0.5 || Math.abs(c.endTime - c.origEnd) > 0.5);
 
   // Playback
-  const stopPlay = () => { if (src.current) try { src.current.stop(); } catch (e) { } src.current = null; cancelAnimationFrame(af.current); setPlaying(false); setProgress(0); };
+  const stopPlay = () => { if (src.current) try { src.current.stop(); } catch (e) { } src.current = null; cancelAnimationFrame(af.current); setPlaying(false); setProgress(0); setPlayingFull(false); setFullProgress(0); };
   const playClip = idx => {
     const cl = clips[idx]; if (!actx.current || !abuf.current || !cl) return;
     if (playing) { const wasSame = sel === idx; stopPlay(); if (wasSame) return; }
@@ -267,6 +281,19 @@ export default function App() {
     af.current = requestAnimationFrame(tick); s.onended = () => { setPlaying(false); setProgress(0); cancelAnimationFrame(af.current); };
   };
   const playRange = (st, et) => { if (!actx.current || !abuf.current) return; stopPlay(); const s = actx.current.createBufferSource(); s.buffer = abuf.current; s.connect(actx.current.destination); s.start(0, st, et - st); src.current = s; setPlaying(true); s.onended = () => setPlaying(false); };
+
+  const playFull = (startFrom = 0) => {
+    if (!actx.current || !abuf.current) return;
+    if (playingFull) { stopPlay(); setPlayingFull(false); setFullProgress(0); return; }
+    stopPlay();
+    const dur = abuf.current.duration;
+    const s = actx.current.createBufferSource(); s.buffer = abuf.current; s.connect(actx.current.destination);
+    s.start(0, startFrom, dur - startFrom); src.current = s; stT.current = actx.current.currentTime - startFrom;
+    setPlaying(true); setPlayingFull(true);
+    const tick = () => { const el = actx.current.currentTime - stT.current; const p = Math.min(1, el / dur); setFullProgress(p); if (el < dur) af.current = requestAnimationFrame(tick); else { setPlaying(false); setPlayingFull(false); setFullProgress(0); } };
+    af.current = requestAnimationFrame(tick);
+    s.onended = () => { setPlaying(false); setPlayingFull(false); setFullProgress(0); cancelAnimationFrame(af.current); };
+  };
 
   // Export
   const expClip = async idx => { setExpIdx(idx); const cl = clips[idx]; if (!abuf.current || !cl) { setExpIdx(null); return; } const sr = abuf.current.sampleRate, ns = Math.floor((cl.endTime - cl.startTime) * sr); const oc = new OfflineAudioContext(abuf.current.numberOfChannels, ns, sr); const s = oc.createBufferSource(); s.buffer = abuf.current; s.connect(oc.destination); s.start(0, cl.startTime, cl.endTime - cl.startTime); const r = await oc.startRendering(); const blob = encodeWav(r); const url = URL.createObjectURL(blob), a = document.createElement("a"); a.href = url; a.download = `${(activeSongData?.name || "clip").replace(/\.[^.]+$/, "")}_clip${idx + 1}_${fmt(cl.startTime)}-${fmt(cl.endTime)}.wav`; a.click(); URL.revokeObjectURL(url); setDl(p => ({ ...p, [idx]: true })); setExpIdx(null); };
@@ -371,6 +398,7 @@ export default function App() {
           </div>
           <div style={{ background: "rgba(0,240,255,0.02)", border: "1px solid rgba(0,240,255,0.06)", borderRadius: 7, padding: "7px 11px", marginBottom: 12, fontSize: 10, color: "#00f0ff" }}>🔒 AI analysis is private — your team won't see these</div>
           {hasAudio && <div style={{ marginBottom: 16 }}>
+            <MasterPlayer playing={playingFull} progress={fullProgress} duration={analysis.duration} onPlay={() => playFull()} onSeek={t => playFull(t)} />
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5, flexWrap: "wrap", gap: 6 }}>
               <div style={{ fontSize: 8, fontFamily: "monospace", color: "#555", letterSpacing: 1 }}>CLICK = SELECT & DRAG · DOUBLE-CLICK = NEW · DRAG EDGES = RESIZE · SCROLL = ZOOM</div>
               <div style={{ display: "flex", gap: 3 }}><span style={{ fontSize: 8, fontFamily: "monospace", color: "#555" }}>Default:</span>{[15, 30, 60].map(d => <button key={d} onClick={() => setDefDur(d)} style={{ ...bs(defDur === d), padding: "2px 7px", fontSize: 9 }}>{d}s</button>)}</div>
@@ -404,6 +432,7 @@ export default function App() {
             </div>)}</div>
           </div>}
           {hasAudio && <div style={{ marginBottom: 20 }}>
+            <MasterPlayer playing={playingFull} progress={fullProgress} duration={analysis.duration} onPlay={() => playFull()} onSeek={t => playFull(t)} />
             <Waveform energy={energy} duration={analysis.duration} clips={clips} highlights={[...consensus.map((c, i) => ({ startTime: c.startTime, endTime: c.endTime, color: c.agreement >= 0.7 ? "rgba(68,255,136,0.1)" : "rgba(255,215,0,0.06)", label: `C${i + 1} (${c.memberCount}/${c.total})`, lc: c.agreement >= 0.7 ? "rgba(68,255,136,0.5)" : "rgba(255,215,0,0.4)" })), ...(showIndiv ? subs.flatMap(s => (s.clips || []).map(c => ({ startTime: c.startTime, endTime: c.endTime, color: "rgba(179,102,255,0.04)", label: "" }))) : [])]} selClip={sel} onSel={setSel} onCreate={createClip} onEdge={dragEdge} onMove={moveClip} zoom={zoom || [0, analysis.duration]} onZoom={setZoom} readonly={false} />
             <div style={{ display: "flex", gap: 4, marginTop: 5 }}><button onClick={() => setZoom(null)} style={{ ...bs(!zoom), padding: "2px 8px", fontSize: 8 }}>Full</button><button onClick={() => setShowIndiv(!showIndiv)} style={{ ...bs(showIndiv), padding: "2px 8px", fontSize: 8 }}>{showIndiv ? "Hide" : "Show"} Individual</button></div>
           </div>}
@@ -434,6 +463,7 @@ export default function App() {
           </div>}
           {audioLoading && <div style={{ textAlign: "center", padding: 30 }}><div style={{ width: 36, height: 36, border: "3px solid rgba(0,240,255,0.12)", borderTop: "3px solid #00f0ff", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 12px" }} /><div style={{ fontSize: 12, color: "#7a7a8e" }}>Loading song...</div></div>}
           {hasAudio && <div>
+            <MasterPlayer playing={playingFull} progress={fullProgress} duration={analysis.duration} onPlay={() => playFull()} onSeek={t => playFull(t)} />
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5, flexWrap: "wrap", gap: 4 }}>
               <div style={{ fontSize: 8, fontFamily: "monospace", color: "#555", letterSpacing: 1 }}>DOUBLE-CLICK = NEW CLIP · DRAG EDGES = RESIZE · DRAG CLIP = MOVE · SCROLL = ZOOM</div>
               <div style={{ display: "flex", gap: 2 }}>{[15, 30, 60].map(d => <button key={d} onClick={() => setDefDur(d)} style={{ ...bs(defDur === d), padding: "2px 7px", fontSize: 9 }}>{d}s</button>)}</div>

@@ -273,7 +273,7 @@ export default function App() {
     const tick = () => { const el = actx.current.currentTime - stT.current; setProgress(Math.min(1, el / dur)); if (el < dur) af.current = requestAnimationFrame(tick); else { setPlaying(false); setProgress(0); } };
     af.current = requestAnimationFrame(tick); s.onended = () => { setPlaying(false); setProgress(0); cancelAnimationFrame(af.current); };
   };
-  const playRange = (st, et) => { if (!actx.current || !abuf.current) return; stopPlay(); const s = actx.current.createBufferSource(); s.buffer = abuf.current; s.connect(actx.current.destination); s.start(0, st, et - st); src.current = s; setPlaying(true); setActiveRange(`${st}-${et}`); s.onended = () => { setPlaying(false); setActiveRange(null); }; };
+  const playRange = (st, et, rangeKey) => { if (!actx.current || !abuf.current) return; stopPlay(); const s = actx.current.createBufferSource(); s.buffer = abuf.current; s.connect(actx.current.destination); s.start(0, st, et - st); src.current = s; setPlaying(true); if (rangeKey) setActiveRange(rangeKey); s.onended = () => { setPlaying(false); setActiveRange(null); }; };
 
   const playFull = (startFrom = 0) => {
     if (!actx.current || !abuf.current) return;
@@ -424,7 +424,7 @@ export default function App() {
                 <div style={{ fontSize: 16, fontWeight: 800, color: c.agreement >= 0.7 ? "#44ff88" : c.agreement >= 0.4 ? "#ffd700" : "#7a7a8e" }}>C{idx + 1}</div>
                 <div style={{ flex: 1 }}><div style={{ fontSize: 12, fontWeight: 600 }}>{fmt(c.startTime)} → {fmt(c.endTime)} <span style={{ color: "#7a7a8e", fontWeight: 400 }}>({c.dur}s)</span></div><div style={{ fontSize: 10, color: "#7a7a8e", marginTop: 2 }}>Picked by: {c.members.join(", ")}</div></div>
                 <div style={{ minWidth: 100 }}><AgreementBar count={c.memberCount} total={c.total} /></div>
-                {hasAudio && <button onClick={() => { const key = `${c.startTime}-${c.endTime}`; if (playing && activeRange === key) stopPlay(); else playRange(c.startTime, c.endTime); }} style={{ width: 28, height: 28, borderRadius: "50%", background: playing && activeRange === `${c.startTime}-${c.endTime}` ? "linear-gradient(135deg,#ff3366,#ff6644)" : "linear-gradient(135deg,#44ff88,#228844)", border: "none", color: "#fff", fontSize: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{playing && activeRange === `${c.startTime}-${c.endTime}` ? "■" : "▶"}</button>}
+                {hasAudio && <button onClick={() => { if (playing && activeRange === `c${idx}`) stopPlay(); else playRange(c.startTime, c.endTime, `c${idx}`); }} style={{ width: 28, height: 28, borderRadius: "50%", background: playing && activeRange === `c${idx}` ? "linear-gradient(135deg,#ff3366,#ff6644)" : "linear-gradient(135deg,#44ff88,#228844)", border: "none", color: "#fff", fontSize: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{playing && activeRange === `c${idx}` ? "■" : "▶"}</button>}
                 {hasAudio && <button onClick={() => expRange(c.startTime, c.endTime, `consensus${idx + 1}`)} style={{ ...bs(false), padding: "3px 8px", fontSize: 9 }}>⬇</button>}
               </div>
               <div style={{ paddingLeft: 26, fontSize: 10, color: "#555" }}>{c.picks.map((p, i) => <span key={i} style={{ marginRight: 10 }}>{p.member}: {fmt(p.startTime)}–{fmt(p.endTime)}</span>)}</div>

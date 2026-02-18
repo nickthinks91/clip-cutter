@@ -157,6 +157,7 @@ export default function App() {
   const [page, setPage] = useState("home"), [activeSong, setActiveSong] = useState(null);
   const [analysis, setAnalysis] = useState(null), [energy, setEnergy] = useState([]);
   const actx = useRef(null), abuf = useRef(null), src = useRef(null), stT = useRef(0), af = useRef(null), scoreFn = useRef(null);
+  const playGen = useRef(0);
   const [clips, setClips] = useState([]), [sel, setSel] = useState(0);
   const [playing, setPlaying] = useState(false), [progress, setProgress] = useState(0);
   const [defDur, setDefDur] = useState(60), [zoom, setZoom] = useState(null);
@@ -263,29 +264,33 @@ export default function App() {
   const isModified = c => !c.isManual && c.origStart != null && (Math.abs(c.startTime - c.origStart) > 0.5 || Math.abs(c.endTime - c.origEnd) > 0.5);
 
   // Playback
-  const stopPlay = () => { if (src.current) try { src.current.stop(); } catch (e) { } src.current = null; cancelAnimationFrame(af.current); setPlaying(false); setProgress(0); setPlayingFull(false); setFullProgress(0); setActiveRange(null); };
+  const playingClipRef = useRef(null);
+  const stopPlay = () => { playGen.current++; if (src.current) try { src.current.onended = null; src.current.stop(); } catch (e) { } src.current = null; cancelAnimationFrame(af.current); setPlaying(false); setProgress(0); setPlayingFull(false); setFullProgress(0); setActiveRange(null); playingClipRef.current = null; };
   const playClip = idx => {
     const cl = clips[idx]; if (!actx.current || !abuf.current || !cl) return;
-    if (playing) { const wasSame = sel === idx; stopPlay(); if (wasSame) return; }
+    const wasSame = playingClipRef.current === idx && playing;
+    stopPlay();
+    if (wasSame) { playingClipRef.current = null; return; }
+    playGen.current++; const gen = playGen.current;
     const s = actx.current.createBufferSource(); s.buffer = abuf.current; s.connect(actx.current.destination);
     s.start(0, cl.startTime, cl.endTime - cl.startTime); src.current = s; stT.current = actx.current.currentTime;
-    setPlaying(true); setSel(idx); const dur = cl.endTime - cl.startTime;
-    const tick = () => { const el = actx.current.currentTime - stT.current; setProgress(Math.min(1, el / dur)); if (el < dur) af.current = requestAnimationFrame(tick); else { setPlaying(false); setProgress(0); } };
-    af.current = requestAnimationFrame(tick); s.onended = () => { setPlaying(false); setProgress(0); cancelAnimationFrame(af.current); };
+    setPlaying(true); setSel(idx); setActiveRange(null); playingClipRef.current = idx; const dur = cl.endTime - cl.startTime;
+    const tick = () => { if (playGen.current !== gen) return; const el = actx.current.currentTime - stT.current; setProgress(Math.min(1, el / dur)); if (el < dur) af.current = requestAnimationFrame(tick); else { setPlaying(false); setProgress(0); playingClipRef.current = null; } };
+    af.current = requestAnimationFrame(tick); s.onended = () => { if (playGen.current !== gen) return; setPlaying(false); setProgress(0); playingClipRef.current = null; cancelAnimationFrame(af.current); };
   };
-  const playRange = (st, et, rangeKey) => { if (!actx.current || !abuf.current) return; stopPlay(); const s = actx.current.createBufferSource(); s.buffer = abuf.current; s.connect(actx.current.destination); s.start(0, st, et - st); src.current = s; setPlaying(true); if (rangeKey) setActiveRange(rangeKey); s.onended = () => { setPlaying(false); setActiveRange(null); }; };
+  const playRange = (st, et, rangeKey) => { if (!actx.current || !abuf.current) return; stopPlay(); playGen.current++; const gen = playGen.current; const s = actx.current.createBufferSource(); s.buffer = abuf.current; s.connect(actx.current.destination); s.start(0, st, et - st); src.current = s; setPlaying(true); if (rangeKey) setActiveRange(rangeKey); s.onended = () => { if (playGen.current !== gen) return; setPlaying(false); setActiveRange(null); }; };
 
   const playFull = (startFrom = 0) => {
     if (!actx.current || !abuf.current) return;
-    if (playingFull) { stopPlay(); setPlayingFull(false); setFullProgress(0); return; }
-    stopPlay();
+    if (playingFull) { stopPlay(); return; }
+    stopPlay(); playGen.current++; const gen = playGen.current;
     const dur = abuf.current.duration;
     const s = actx.current.createBufferSource(); s.buffer = abuf.current; s.connect(actx.current.destination);
     s.start(0, startFrom, dur - startFrom); src.current = s; stT.current = actx.current.currentTime - startFrom;
     setPlaying(true); setPlayingFull(true);
-    const tick = () => { const el = actx.current.currentTime - stT.current; const p = Math.min(1, el / dur); setFullProgress(p); if (el < dur) af.current = requestAnimationFrame(tick); else { setPlaying(false); setPlayingFull(false); setFullProgress(0); } };
+    const tick = () => { if (playGen.current !== gen) return; const el = actx.current.currentTime - stT.current; const p = Math.min(1, el / dur); setFullProgress(p); if (el < dur) af.current = requestAnimationFrame(tick); else { setPlaying(false); setPlayingFull(false); setFullProgress(0); } };
     af.current = requestAnimationFrame(tick);
-    s.onended = () => { setPlaying(false); setPlayingFull(false); setFullProgress(0); cancelAnimationFrame(af.current); };
+    s.onended = () => { if (playGen.current !== gen) return; setPlaying(false); setPlayingFull(false); setFullProgress(0); cancelAnimationFrame(af.current); };
   };
 
   // Export

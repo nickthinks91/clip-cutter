@@ -351,10 +351,10 @@ export default function App() {
   const startAB = (idx, other) => setAb({ a: idx, b: other !== undefined ? other : (idx === 0 ? 1 : 0) });
 
   if (!userLoaded) return <div style={{ minHeight: "100vh", background: "#08080d", display: "flex", alignItems: "center", justifyContent: "center", color: "#555" }}>Loading...</div>;
-  if (!user) return <div style={{ minHeight: "100vh", background: "#08080d", color: "#e8e8f0", fontFamily: "'Segoe UI',system-ui,sans-serif", display: "flex", alignItems: "center", justifyContent: "center" }}><div style={{ maxWidth: 400, width: "100%", padding: 24 }}><div style={{ textAlign: "center", marginBottom: 32 }}><div style={{ fontSize: 36, marginBottom: 12 }}>🎵</div><h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 6, background: "linear-gradient(135deg,#e8e8f0 30%,#00f0ff 70%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Clip Cutter</h1><p style={{ color: "#7a7a8e", fontSize: 13 }}>Team Collaboration</p></div><SetupForm onSetup={setupUser} /></div></div>;
+  if (!user) return <div style={{ minHeight: "100vh", background: "#08080d", color: "#e8e8f0", fontFamily: "'Segoe UI',system-ui,sans-serif", display: "flex", alignItems: "center", justifyContent: "center", overflowX: "hidden" }}><div style={{ maxWidth: 400, width: "100%", padding: "24px 16px" }}><div style={{ textAlign: "center", marginBottom: 32 }}><div style={{ fontSize: 36, marginBottom: 12 }}>🎵</div><h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 6, background: "linear-gradient(135deg,#e8e8f0 30%,#00f0ff 70%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Clip Cutter</h1><p style={{ color: "#7a7a8e", fontSize: 13 }}>Team Collaboration</p></div><SetupForm onSetup={setupUser} /></div></div>;
 
   return (
-    <div style={{ minHeight: "100vh", background: "#08080d", color: "#e8e8f0", fontFamily: "'Segoe UI',system-ui,sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: "#08080d", color: "#e8e8f0", fontFamily: "'Segoe UI',system-ui,sans-serif", overflowX: "hidden", width: "100%" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderBottom: "1px solid rgba(255,255,255,0.05)", background: "rgba(255,255,255,0.015)", position: "sticky", top: 0, zIndex: 50, flexWrap: "wrap", gap: 6 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontSize: 15 }}>🎵</span><span style={{ fontWeight: 700, fontSize: 13 }}>Clip Cutter</span><span style={{ fontFamily: "monospace", fontSize: 8, color: isLeader ? "#ff3366" : "#00f0ff", letterSpacing: 2, background: isLeader ? "rgba(255,51,102,0.1)" : "rgba(0,240,255,0.1)", padding: "2px 6px", borderRadius: 3 }}>{user.role.toUpperCase()}</span></div>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 11, color: "#7a7a8e" }}>{user.name}</span><button onClick={() => setPage("home")} style={bs(page === "home")}>Home</button><button onClick={() => { setUser(null); localStorage.removeItem("cc-user"); setClips([]); setSel(0); setPage("home"); setActiveSong(null); setEnergy([]); setAnalysis(null); setSubmitted(false); setSubs([]); setConsensus([]); stopPlay(); }} style={{ ...bs(false), fontSize: 9, padding: "3px 8px" }}>Logout</button></div>
@@ -362,7 +362,7 @@ export default function App() {
       {notice && <div style={{ position: "fixed", top: 50, left: "50%", transform: "translateX(-50%)", background: "rgba(68,255,136,0.15)", border: "1px solid rgba(68,255,136,0.3)", color: "#44ff88", padding: "8px 20px", borderRadius: 8, fontSize: 12, fontFamily: "monospace", zIndex: 100 }}>{notice}</div>}
       {audioLoading && <div style={{ position: "fixed", top: 50, left: "50%", transform: "translateX(-50%)", background: "rgba(0,240,255,0.1)", border: "1px solid rgba(0,240,255,0.2)", color: "#00f0ff", padding: "8px 20px", borderRadius: 8, fontSize: 12, fontFamily: "monospace", zIndex: 100 }}>Loading audio...</div>}
 
-      <div style={{ maxWidth: 960, margin: "0 auto", padding: "20px 10px 80px" }}>
+      <div style={{ maxWidth: 960, margin: "0 auto", padding: "20px 10px 80px", overflowX: "hidden" }}>
 
         {/* HOME */}
         {page === "home" && <div>
@@ -421,12 +421,12 @@ export default function App() {
           {consensus.length > 0 && <div style={{ marginBottom: 24 }}>
             <div style={{ fontSize: 10, fontFamily: "monospace", color: "#44ff88", letterSpacing: 2, marginBottom: 8 }}>CONSENSUS CLIPS</div>
             <div style={{ display: "grid", gap: 8 }}>{consensus.map((c, idx) => <div key={idx} style={{ ...cs(false), borderColor: c.agreement >= 0.7 ? "rgba(68,255,136,0.2)" : c.agreement >= 0.4 ? "rgba(255,215,0,0.15)" : "rgba(255,255,255,0.04)" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
                 <div style={{ fontSize: 16, fontWeight: 800, color: c.agreement >= 0.7 ? "#44ff88" : c.agreement >= 0.4 ? "#ffd700" : "#7a7a8e" }}>C{idx + 1}</div>
-                <div style={{ flex: 1 }}><div style={{ fontSize: 12, fontWeight: 600 }}>{fmt(c.startTime)} → {fmt(c.endTime)} <span style={{ color: "#7a7a8e", fontWeight: 400 }}>({c.dur}s)</span></div><div style={{ fontSize: 10, color: "#7a7a8e", marginTop: 2 }}>Picked by: {c.members.join(", ")}</div></div>
-                <div style={{ minWidth: 100 }}><AgreementBar count={c.memberCount} total={c.total} /></div>
-                {hasAudio && <button onClick={() => { if (playing && activeRange === `c${idx}`) stopPlay(); else playRange(c.startTime, c.endTime, `c${idx}`); }} style={{ width: 28, height: 28, borderRadius: "50%", background: playing && activeRange === `c${idx}` ? "linear-gradient(135deg,#ff3366,#ff6644)" : "linear-gradient(135deg,#44ff88,#228844)", border: "none", color: "#fff", fontSize: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{playing && activeRange === `c${idx}` ? "■" : "▶"}</button>}
-                {hasAudio && <button onClick={() => expRange(c.startTime, c.endTime, `consensus${idx + 1}`)} style={{ ...bs(false), padding: "3px 8px", fontSize: 9 }}>⬇</button>}
+                <div style={{ flex: "1 1 150px", minWidth: 0 }}><div style={{ fontSize: 12, fontWeight: 600 }}>{fmt(c.startTime)} → {fmt(c.endTime)} <span style={{ color: "#7a7a8e", fontWeight: 400 }}>({c.dur}s)</span></div><div style={{ fontSize: 10, color: "#7a7a8e", marginTop: 2 }}>Picked by: {c.members.join(", ")}</div></div>
+                <div style={{ minWidth: 80 }}><AgreementBar count={c.memberCount} total={c.total} /></div>
+                {hasAudio && <button onClick={() => { if (playing && activeRange === `c${idx}`) stopPlay(); else playRange(c.startTime, c.endTime, `c${idx}`); }} style={{ width: 28, height: 28, borderRadius: "50%", background: playing && activeRange === `c${idx}` ? "linear-gradient(135deg,#ff3366,#ff6644)" : "linear-gradient(135deg,#44ff88,#228844)", border: "none", color: "#fff", fontSize: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{playing && activeRange === `c${idx}` ? "■" : "▶"}</button>}
+                {hasAudio && <button onClick={() => expRange(c.startTime, c.endTime, `consensus${idx + 1}`)} style={{ ...bs(false), padding: "3px 8px", fontSize: 9, flexShrink: 0 }}>⬇</button>}
               </div>
               <div style={{ paddingLeft: 26, fontSize: 10, color: "#555" }}>{c.picks.map((p, i) => <span key={i} style={{ marginRight: 10 }}>{p.member}: {fmt(p.startTime)}–{fmt(p.endTime)}</span>)}</div>
             </div>)}</div>

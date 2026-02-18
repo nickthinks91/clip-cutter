@@ -77,7 +77,7 @@ function encodeWav(ab) {
 const fmt = s => { const m = Math.floor(s / 60), sc = Math.floor(s % 60); return `${m}:${sc.toString().padStart(2, "0")}`; };
 
 /* ═══ WAVEFORM ═══ */
-function Waveform({ energy, duration, clips, highlights, selClip, onSel, onCreate, onEdge, onMove, zoom, onZoom, readonly }) {
+function Waveform({ energy, duration, clips, highlights, selClip, onSel, onCreate, onEdge, onMove, zoom, onZoom, readonly, onPlayFrom, playheadTime }) {
   const ref = useRef(null), [drag, setDrag] = useState(null), [hover, setHover] = useState(null);
   const zS = zoom[0], zE = zoom[1], zD = zE - zS;
   const t2x = (t, w) => ((t - zS) / zD) * w, x2t = (x, w) => zS + (x / w) * zD;
@@ -85,6 +85,8 @@ function Waveform({ energy, duration, clips, highlights, selClip, onSel, onCreat
     const c = ref.current; if (!c || !energy.length) return;
     const ctx = c.getContext("2d"), w = c.width, h = c.height;
     ctx.clearRect(0, 0, w, h); ctx.fillStyle = "#0a0a12"; ctx.fillRect(0, 0, w, h);
+    // Full track highlight when no clips
+    if ((!clips || clips.length === 0) && !readonly) { ctx.fillStyle = "rgba(0,240,255,0.06)"; ctx.fillRect(0, 0, w, h); }
     const gs = zD < 30 ? 1 : zD < 120 ? 5 : 10;
     ctx.strokeStyle = "rgba(255,255,255,0.03)"; ctx.lineWidth = 1;
     for (let t = Math.ceil(zS / gs) * gs; t <= zE; t += gs) { const x = t2x(t, w); ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
@@ -94,12 +96,14 @@ function Waveform({ energy, duration, clips, highlights, selClip, onSel, onCreat
     ctx.beginPath(); ctx.moveTo(0, h); for (let x = 0; x < w; x++) { const eI = si + Math.floor((x / w) * (ei - si)); ctx.lineTo(x, h - (energy[Math.min(eI, energy.length - 1)] || 0) * h * 0.85); } ctx.lineTo(w, h); ctx.closePath();
     const g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, "rgba(0,240,255,0.5)"); g.addColorStop(0.5, "rgba(179,102,255,0.2)"); g.addColorStop(1, "rgba(255,51,102,0.02)"); ctx.fillStyle = g; ctx.fill();
     ctx.fillStyle = "rgba(255,255,255,0.2)"; ctx.font = "9px monospace"; for (let t = Math.ceil(zS / gs) * gs; t <= zE; t += gs) ctx.fillText(fmt(t), t2x(t, w) + 2, h - 3);
-    if (hover !== null) { const hx = t2x(hover, w); ctx.strokeStyle = "rgba(255,255,255,0.2)"; ctx.lineWidth = 1; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(hx, 0); ctx.lineTo(hx, h); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = "rgba(255,255,255,0.4)"; ctx.font = "9px monospace"; ctx.fillText(fmt(hover), hx + 3, h - 14); }
-  }, [energy, clips, highlights, selClip, duration, zoom, hover, drag]);
+    // Playhead
+    if (playheadTime != null && playheadTime >= zS && playheadTime <= zE) { const px = t2x(playheadTime, w); ctx.strokeStyle = "#ff3366"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, h); ctx.stroke(); ctx.fillStyle = "#ff3366"; ctx.font = "bold 9px monospace"; ctx.fillText(fmt(playheadTime), px + 4, 12); }
+    if (hover !== null && playheadTime == null) { const hx = t2x(hover, w); ctx.strokeStyle = "rgba(255,255,255,0.2)"; ctx.lineWidth = 1; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(hx, 0); ctx.lineTo(hx, h); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = "rgba(255,255,255,0.4)"; ctx.font = "9px monospace"; ctx.fillText(fmt(hover), hx + 3, h - 14); }
+  }, [energy, clips, highlights, selClip, duration, zoom, hover, drag, playheadTime]);
   const gx = e => { const r = ref.current.getBoundingClientRect(); return (e.clientX - r.left) * (800 / r.width); };
   const findEdge = cx => { if (readonly) return null; for (let i = 0; i < (clips || []).length; i++) { const x1 = t2x(clips[i].startTime, 800), x2 = t2x(clips[i].endTime, 800); if (Math.abs(cx - x1) < 10) return { idx: i, edge: "start" }; if (Math.abs(cx - x2) < 10) return { idx: i, edge: "end" }; } return null; };
   const findClip = cx => { const t = x2t(cx, 800), hits = []; for (let i = 0; i < (clips || []).length; i++) if (t >= clips[i].startTime && t <= clips[i].endTime) hits.push(i); if (!hits.length) return null; if (hits.includes(selClip)) return selClip; return hits[0]; };
-  const onDown = e => { if (readonly) return; const x = gx(e); const eh = findEdge(x); if (eh) { setDrag({ type: "edge", ...eh }); return; } const hit = findClip(x); if (hit !== null) { onSel(hit); setDrag({ type: "move", idx: hit, startT: x2t(x, 800), origS: clips[hit].startTime, origE: clips[hit].endTime }); } };
+  const onDown = e => { if (readonly) return; const x = gx(e); const eh = findEdge(x); if (eh) { setDrag({ type: "edge", ...eh }); return; } const hit = findClip(x); if (hit !== null) { onSel(hit); setDrag({ type: "move", idx: hit, startT: x2t(x, 800), origS: clips[hit].startTime, origE: clips[hit].endTime }); } else if (onPlayFrom) { onPlayFrom(Math.max(0, x2t(x, 800))); } };
   const onMv = e => { const x = gx(e); setHover(x2t(x, 800)); if (drag?.type === "move") { const dt = x2t(x, 800) - drag.startT, cd = drag.origE - drag.origS; let ns = drag.origS + dt, ne = drag.origE + dt; if (ns < 0) { ns = 0; ne = cd; } if (ne > duration) { ne = duration; ns = duration - cd; } onMove(drag.idx, ns, ne); } else if (drag?.type === "edge") onEdge(drag.idx, drag.edge, Math.max(0, Math.min(duration, x2t(x, 800)))); };
   const onUp = () => setDrag(null);
   const onDbl = e => { if (readonly) return; onCreate(Math.max(0, x2t(gx(e), 800)), null); };
@@ -110,18 +114,6 @@ function Waveform({ energy, duration, clips, highlights, selClip, onSel, onCreat
 /* ═══ UI ═══ */
 function AgreementBar({ count, total }) { const pct = total > 0 ? (count / total) * 100 : 0; const color = pct >= 70 ? "#44ff88" : pct >= 40 ? "#ffd700" : "#ff8844"; return <div style={{ display: "flex", alignItems: "center", gap: 8 }}><div style={{ flex: 1, height: 6, background: "rgba(255,255,255,0.06)", borderRadius: 3, overflow: "hidden" }}><div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: 3 }} /></div><span style={{ fontSize: 11, fontWeight: 700, color, fontFamily: "monospace", minWidth: 40 }}>{count}/{total}</span></div>; }
 
-function MasterPlayer({ playing, progress, duration, onPlay, onSeek }) {
-  const elapsed = duration * progress;
-  return <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8, marginBottom: 8 }}>
-    <button onClick={() => onPlay()} style={{ width: 34, height: 34, borderRadius: "50%", background: playing ? "linear-gradient(135deg,#ff3366,#ff6644)" : "linear-gradient(135deg,#00f0ff,#0088aa)", border: "none", color: "#fff", fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{playing ? "■" : "▶"}</button>
-    <div style={{ flex: 1, cursor: "pointer" }} onClick={e => { const r = e.currentTarget.getBoundingClientRect(); const p = (e.clientX - r.left) / r.width; onSeek(p * duration); }}>
-      <div style={{ height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}>
-        <div style={{ width: `${progress * 100}%`, height: "100%", background: "linear-gradient(90deg,#00f0ff,#b366ff)", borderRadius: 2, transition: "width 0.1s linear" }} />
-      </div>
-    </div>
-    <span style={{ fontSize: 10, fontFamily: "monospace", color: "#7a7a8e", minWidth: 70, textAlign: "right" }}>{fmt(elapsed)} / {fmt(duration)}</span>
-  </div>;
-}
 
 function ClipCard({ c, idx, sel, playing, isModified, bs, onSel, onPlay, onExport, onDur, onNote, onAB, onRevert, onDel, editNote, setEditNote, ab, clips }) {
   const isSel = idx === sel;
@@ -344,6 +336,7 @@ export default function App() {
   const bs = active => ({ background: active ? "rgba(0,240,255,0.1)" : "rgba(255,255,255,0.03)", border: `1px solid ${active ? "rgba(0,240,255,0.25)" : "rgba(255,255,255,0.07)"}`, color: active ? "#00f0ff" : "#7a7a8e", padding: "5px 12px", borderRadius: 6, fontSize: 11, cursor: "pointer", fontFamily: "monospace", transition: "all 0.2s" });
   const cs = active => ({ background: active ? "rgba(0,240,255,0.035)" : "rgba(255,255,255,0.012)", border: `1px solid ${active ? "rgba(0,240,255,0.15)" : "rgba(255,255,255,0.04)"}`, borderRadius: 9, padding: "12px 14px", cursor: "pointer", transition: "all 0.2s" });
   const selC = clips[sel];
+  const playheadTime = playingFull && analysis?.duration ? fullProgress * analysis.duration : null;
   const startAB = (idx, other) => setAb({ a: idx, b: other !== undefined ? other : (idx === 0 ? 1 : 0) });
 
   if (!userLoaded) return <div style={{ minHeight: "100vh", background: "#08080d", display: "flex", alignItems: "center", justifyContent: "center", color: "#555" }}>Loading...</div>;
@@ -398,12 +391,11 @@ export default function App() {
           </div>
           <div style={{ background: "rgba(0,240,255,0.02)", border: "1px solid rgba(0,240,255,0.06)", borderRadius: 7, padding: "7px 11px", marginBottom: 12, fontSize: 10, color: "#00f0ff" }}>🔒 AI analysis is private — your team won't see these</div>
           {hasAudio && <div style={{ marginBottom: 16 }}>
-            <MasterPlayer playing={playingFull} progress={fullProgress} duration={analysis.duration} onPlay={() => playFull()} onSeek={t => playFull(t)} />
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5, flexWrap: "wrap", gap: 6 }}>
               <div style={{ fontSize: 8, fontFamily: "monospace", color: "#555", letterSpacing: 1 }}>CLICK = SELECT & DRAG · DOUBLE-CLICK = NEW · DRAG EDGES = RESIZE · SCROLL = ZOOM</div>
               <div style={{ display: "flex", gap: 3 }}><span style={{ fontSize: 8, fontFamily: "monospace", color: "#555" }}>Default:</span>{[15, 30, 60].map(d => <button key={d} onClick={() => setDefDur(d)} style={{ ...bs(defDur === d), padding: "2px 7px", fontSize: 9 }}>{d}s</button>)}</div>
             </div>
-            <Waveform energy={energy} duration={analysis.duration} clips={clips} highlights={[]} selClip={sel} onSel={setSel} onCreate={createClip} onEdge={dragEdge} onMove={moveClip} zoom={zoom || [0, analysis.duration]} onZoom={setZoom} readonly={false} />
+            <Waveform energy={energy} duration={analysis.duration} clips={clips} highlights={[]} selClip={sel} onSel={setSel} onCreate={createClip} onEdge={dragEdge} onMove={moveClip} zoom={zoom || [0, analysis.duration]} onZoom={setZoom} readonly={false} onPlayFrom={t => playFull(t)} playheadTime={playheadTime} />
             <div style={{ display: "flex", gap: 4, marginTop: 5 }}><button onClick={() => setZoom(null)} style={{ ...bs(!zoom), padding: "2px 8px", fontSize: 8 }}>Full Track</button>{selC && <button onClick={() => setZoom([Math.max(0, selC.startTime - 3), Math.min(analysis.duration, selC.endTime + 3)])} style={{ ...bs(false), padding: "2px 8px", fontSize: 8 }}>Zoom Selected</button>}</div>
           </div>}
           {ab && <div style={{ background: "rgba(179,102,255,0.05)", border: "1px solid rgba(179,102,255,0.15)", borderRadius: 7, padding: "8px 12px", marginBottom: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}><span style={{ fontSize: 10, color: "#b366ff", fontWeight: 600, fontFamily: "monospace" }}>A/B</span><button onClick={() => playClip(ab.a)} style={{ ...bs(playing && sel === ab.a), padding: "4px 12px" }}>▶ A ({fmt(clips[ab.a]?.startTime)})</button><span style={{ color: "#444", fontSize: 10 }}>vs</span><button onClick={() => playClip(ab.b)} style={{ ...bs(playing && sel === ab.b), padding: "4px 12px" }}>▶ B ({fmt(clips[ab.b]?.startTime)})</button><button onClick={() => { stopPlay(); setAb(null); }} style={{ marginLeft: "auto", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#7a7a8e", fontSize: 9, padding: "3px 8px", borderRadius: 4, cursor: "pointer" }}>✕</button></div>}
@@ -432,8 +424,7 @@ export default function App() {
             </div>)}</div>
           </div>}
           {hasAudio && <div style={{ marginBottom: 20 }}>
-            <MasterPlayer playing={playingFull} progress={fullProgress} duration={analysis.duration} onPlay={() => playFull()} onSeek={t => playFull(t)} />
-            <Waveform energy={energy} duration={analysis.duration} clips={clips} highlights={[...consensus.map((c, i) => ({ startTime: c.startTime, endTime: c.endTime, color: c.agreement >= 0.7 ? "rgba(68,255,136,0.1)" : "rgba(255,215,0,0.06)", label: `C${i + 1} (${c.memberCount}/${c.total})`, lc: c.agreement >= 0.7 ? "rgba(68,255,136,0.5)" : "rgba(255,215,0,0.4)" })), ...(showIndiv ? subs.flatMap(s => (s.clips || []).map(c => ({ startTime: c.startTime, endTime: c.endTime, color: "rgba(179,102,255,0.04)", label: "" }))) : [])]} selClip={sel} onSel={setSel} onCreate={createClip} onEdge={dragEdge} onMove={moveClip} zoom={zoom || [0, analysis.duration]} onZoom={setZoom} readonly={false} />
+            <Waveform energy={energy} duration={analysis.duration} clips={clips} highlights={[...consensus.map((c, i) => ({ startTime: c.startTime, endTime: c.endTime, color: c.agreement >= 0.7 ? "rgba(68,255,136,0.1)" : "rgba(255,215,0,0.06)", label: `C${i + 1} (${c.memberCount}/${c.total})`, lc: c.agreement >= 0.7 ? "rgba(68,255,136,0.5)" : "rgba(255,215,0,0.4)" })), ...(showIndiv ? subs.flatMap(s => (s.clips || []).map(c => ({ startTime: c.startTime, endTime: c.endTime, color: "rgba(179,102,255,0.04)", label: "" }))) : [])]} selClip={sel} onSel={setSel} onCreate={createClip} onEdge={dragEdge} onMove={moveClip} zoom={zoom || [0, analysis.duration]} onZoom={setZoom} readonly={false} onPlayFrom={t => playFull(t)} playheadTime={playheadTime} />
             <div style={{ display: "flex", gap: 4, marginTop: 5 }}><button onClick={() => setZoom(null)} style={{ ...bs(!zoom), padding: "2px 8px", fontSize: 8 }}>Full</button><button onClick={() => setShowIndiv(!showIndiv)} style={{ ...bs(showIndiv), padding: "2px 8px", fontSize: 8 }}>{showIndiv ? "Hide" : "Show"} Individual</button></div>
           </div>}
           {clips.length > 0 && <div style={{ marginBottom: 20 }}>
@@ -463,12 +454,11 @@ export default function App() {
           </div>}
           {audioLoading && <div style={{ textAlign: "center", padding: 30 }}><div style={{ width: 36, height: 36, border: "3px solid rgba(0,240,255,0.12)", borderTop: "3px solid #00f0ff", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 12px" }} /><div style={{ fontSize: 12, color: "#7a7a8e" }}>Loading song...</div></div>}
           {hasAudio && <div>
-            <MasterPlayer playing={playingFull} progress={fullProgress} duration={analysis.duration} onPlay={() => playFull()} onSeek={t => playFull(t)} />
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5, flexWrap: "wrap", gap: 4 }}>
               <div style={{ fontSize: 8, fontFamily: "monospace", color: "#555", letterSpacing: 1 }}>DOUBLE-CLICK = NEW CLIP · DRAG EDGES = RESIZE · DRAG CLIP = MOVE · SCROLL = ZOOM</div>
               <div style={{ display: "flex", gap: 2 }}>{[15, 30, 60].map(d => <button key={d} onClick={() => setDefDur(d)} style={{ ...bs(defDur === d), padding: "2px 7px", fontSize: 9 }}>{d}s</button>)}</div>
             </div>
-            <Waveform energy={energy} duration={analysis.duration} clips={clips} highlights={[]} selClip={sel} onSel={setSel} onCreate={createClip} onEdge={dragEdge} onMove={moveClip} zoom={zoom || [0, analysis.duration]} onZoom={setZoom} readonly={false} />
+            <Waveform energy={energy} duration={analysis.duration} clips={clips} highlights={[]} selClip={sel} onSel={setSel} onCreate={createClip} onEdge={dragEdge} onMove={moveClip} zoom={zoom || [0, analysis.duration]} onZoom={setZoom} readonly={false} onPlayFrom={t => playFull(t)} playheadTime={playheadTime} />
             <div style={{ fontSize: 9, fontFamily: "monospace", color: "#555", margin: "12px 0 6px", letterSpacing: 1 }}>YOUR PICKS ({clips.length}/5)</div>
             <div style={{ display: "grid", gap: 6, marginBottom: 16 }}>{clips.map((c, idx) => <div key={c.id} onClick={() => setSel(idx)} style={{ ...cs(idx === sel), display: "flex", alignItems: "center", gap: 8 }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: "#ffd700", minWidth: 24 }}>✎</div>

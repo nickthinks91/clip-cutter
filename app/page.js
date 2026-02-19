@@ -351,10 +351,11 @@ export default function App() {
   const startAB = (idx, other) => setAb({ a: idx, b: other !== undefined ? other : (idx === 0 ? 1 : 0) });
 
   if (!userLoaded) return <div style={{ minHeight: "100vh", background: "#08080d", display: "flex", alignItems: "center", justifyContent: "center", color: "#555" }}>Loading...</div>;
-  if (!user) return <div style={{ minHeight: "100vh", background: "#08080d", color: "#e8e8f0", fontFamily: "'Segoe UI',system-ui,sans-serif", display: "flex", alignItems: "center", justifyContent: "center", overflowX: "hidden" }}><div style={{ maxWidth: 400, width: "100%", padding: "24px 16px" }}><div style={{ textAlign: "center", marginBottom: 32 }}><div style={{ fontSize: 36, marginBottom: 12 }}>🎵</div><h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 6, background: "linear-gradient(135deg,#e8e8f0 30%,#00f0ff 70%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Clip Cutter</h1><p style={{ color: "#7a7a8e", fontSize: 13 }}>Team Collaboration</p></div><SetupForm onSetup={setupUser} /></div></div>;
+  if (!user) return <div style={{ minHeight: "100vh", background: "#08080d", color: "#e8e8f0", fontFamily: "'Segoe UI',system-ui,sans-serif", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", width: "100vw", maxWidth: "100vw" }}><div style={{ maxWidth: 400, width: "100%", padding: "24px 20px", overflow: "hidden" }}><div style={{ textAlign: "center", marginBottom: 32 }}><div style={{ fontSize: 36, marginBottom: 12 }}>🎵</div><h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 6, background: "linear-gradient(135deg,#e8e8f0 30%,#00f0ff 70%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Clip Cutter</h1><p style={{ color: "#7a7a8e", fontSize: 13 }}>Team Collaboration</p></div><SetupForm onSetup={setupUser} /></div></div>;
 
   return (
-    <div style={{ minHeight: "100vh", background: "#08080d", color: "#e8e8f0", fontFamily: "'Segoe UI',system-ui,sans-serif", overflowX: "hidden", width: "100vw", maxWidth: "100vw", position: "relative" }}>
+    <div style={{ minHeight: "100vh", background: "#08080d", color: "#e8e8f0", fontFamily: "'Segoe UI',system-ui,sans-serif", overflow: "hidden", width: "100%", maxWidth: "100vw" }}>
+      <div style={{ overflowX: "hidden", overflowY: "auto", height: "100vh", WebkitOverflowScrolling: "touch" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderBottom: "1px solid rgba(255,255,255,0.05)", background: "rgba(255,255,255,0.015)", position: "sticky", top: 0, zIndex: 50, flexWrap: "wrap", gap: 6 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontSize: 15 }}>🎵</span><span style={{ fontWeight: 700, fontSize: 13 }}>Clip Cutter</span><span style={{ fontFamily: "monospace", fontSize: 8, color: isLeader ? "#ff3366" : "#00f0ff", letterSpacing: 2, background: isLeader ? "rgba(255,51,102,0.1)" : "rgba(0,240,255,0.1)", padding: "2px 6px", borderRadius: 3 }}>{user.role.toUpperCase()}</span></div>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 11, color: "#7a7a8e" }}>{user.name}</span><button onClick={() => setPage("home")} style={bs(page === "home")}>Home</button><button onClick={() => { setUser(null); localStorage.removeItem("cc-user"); setClips([]); setSel(0); setPage("home"); setActiveSong(null); setEnergy([]); setAnalysis(null); setSubmitted(false); setSubs([]); setConsensus([]); stopPlay(); }} style={{ ...bs(false), fontSize: 9, padding: "3px 8px" }}>Logout</button></div>
@@ -362,7 +363,7 @@ export default function App() {
       {notice && <div style={{ position: "fixed", top: 50, left: "50%", transform: "translateX(-50%)", background: "rgba(68,255,136,0.15)", border: "1px solid rgba(68,255,136,0.3)", color: "#44ff88", padding: "8px 20px", borderRadius: 8, fontSize: 12, fontFamily: "monospace", zIndex: 100 }}>{notice}</div>}
       {audioLoading && <div style={{ position: "fixed", top: 50, left: "50%", transform: "translateX(-50%)", background: "rgba(0,240,255,0.1)", border: "1px solid rgba(0,240,255,0.2)", color: "#00f0ff", padding: "8px 20px", borderRadius: 8, fontSize: 12, fontFamily: "monospace", zIndex: 100 }}>Loading audio...</div>}
 
-      <div style={{ maxWidth: 960, margin: "0 auto", padding: "20px 10px 80px", overflowX: "hidden" }}>
+      <div style={{ maxWidth: 960, margin: "0 auto", padding: "20px 12px 80px", width: "calc(100% - 0px)", overflowX: "hidden", overflowY: "auto" }}>
 
         {/* HOME */}
         {page === "home" && <div>
@@ -496,7 +497,8 @@ export default function App() {
       </div>
 
       {playing && <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, height: 3, zIndex: 100, background: "rgba(0,240,255,0.08)" }}><div style={{ height: "100%", width: `${progress * 100}%`, background: "linear-gradient(90deg,#00f0ff,#b366ff)", transition: "width 0.1s linear" }} /></div>}
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}*{box-sizing:border-box}button:hover{filter:brightness(1.12)}input:focus{border-color:rgba(0,240,255,0.25)!important}html{overflow-x:hidden}body{overflow-x:hidden;margin:0;width:100%;max-width:100vw}#__next{overflow-x:hidden;max-width:100vw}canvas{max-width:100%}`}</style>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}*{box-sizing:border-box}button:hover{filter:brightness(1.12)}input:focus{border-color:rgba(0,240,255,0.25)!important}html{overflow-x:hidden;width:100%;height:100%}body{margin:0;padding:0;overflow-x:hidden;width:100%;max-width:100%;-webkit-text-size-adjust:100%}canvas{display:block;max-width:100%}input,button{max-width:100%}#__next{overflow-x:hidden;width:100%}`}</style>
+      </div>
     </div>
   );
 }

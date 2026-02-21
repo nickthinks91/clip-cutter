@@ -1,6 +1,6 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
-import { getSongs, createSong, deleteSong as dbDeleteSong, uploadAudio, getAudioUrl, saveAiClips, getAiClips, submitPicks as dbSubmitPicks, getSubmissions, subscribeToSubmissions } from "../lib/supabase";
+import { getSongs, createSong, deleteSong as dbDeleteSong, uploadAudio, getAudioUrl, saveAiClips, getAiClips, submitPicks as dbSubmitPicks, getSubmissions, subscribeToSubmissions, findViralMatch, getViralPatterns, getTopViralSounds } from "../lib/supabase";
 
 /* ═══ AUDIO ANALYSIS ═══ */
 function analyzeAudio(audioBuffer) {
@@ -127,6 +127,7 @@ function ClipCard({ c, idx, sel, playing, isModified, bs, onSel, onPlay, onExpor
         <div style={{ flex: 1 }}>
           <span style={{ fontSize: 11, fontWeight: 600 }}>{fmt(c.startTime)} → {fmt(c.endTime)}</span>
           <span style={{ fontSize: 9, color: "#7a7a8e", marginLeft: 5 }}>({c.dur}s)</span>
+          {c.viralBoost && parseFloat(c.viralBoost) > 0.3 && <span style={{ fontSize: 7, color: "#ffd700", marginLeft: 5, fontFamily: "monospace", background: "rgba(255,215,0,0.1)", padding: "0 4px", borderRadius: 2 }}>🔥 VIRAL</span>}
           {isModified && <span style={{ fontSize: 8, color: "#ff8844", marginLeft: 5, fontFamily: "monospace" }}>● edited</span>}
           {c.notes && <span style={{ fontSize: 9, color: "#b366ff", marginLeft: 6, fontStyle: "italic" }}>📝 {c.notes}</span>}
         </div>
@@ -175,6 +176,7 @@ export default function App() {
   const [lastTapTime, setLastTapTime] = useState(0);
   const [playingFull, setPlayingFull] = useState(false), [fullProgress, setFullProgress] = useState(0);
   const [activeRange, setActiveRange] = useState(null);
+  const [viralInfo, setViralInfo] = useState(null); // { matches, matchType, patterns, genre }
 
   // Load user from localStorage & songs from Supabase
   useEffect(() => {
@@ -220,21 +222,52 @@ export default function App() {
   const handleUpload = async (e) => {
     e.preventDefault();
     const f = e.dataTransfer?.files?.[0] || e.target?.files?.[0]; if (!f) return;
-    setAnalyzing(true);
+    setAnalyzing(true); setViralInfo(null);
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)(); actx.current = ctx;
       const buf = await ctx.decodeAudioData(await f.arrayBuffer()); abuf.current = buf;
       const res = analyzeAudio(buf); setAnalysis(res); setEnergy(res.energy); scoreFn.current = res.scoreClip;
+      
+      // ═══ VIRAL INTELLIGENCE ═══
+      let viralData = null;
+      try {
+        const viral = await findViralMatch(f.name);
+        if (viral.matches.length > 0) {
+          const topMatch = viral.matches[0];
+          const genre = topMatch.genre || topMatch.sub_genre;
+          const patterns = genre ? await getViralPatterns(genre) : null;
+          viralData = { ...viral, patterns, genre: topMatch.genre, topMatch };
+          setViralInfo(viralData);
+        } else {
+          setViralInfo({ matches: [], matchType: 'none', patterns: null });
+        }
+      } catch (ve) { console.log('Viral lookup skipped:', ve.message); }
+
+      // Boost AI clip scoring with viral pattern data
+      let topClips = res.topClips;
+      if (viralData?.patterns?.clip_duration) {
+        const idealDur = viralData.patterns.clip_duration.median_duration || 30;
+        // Re-score clips with viral intelligence weighting
+        topClips = topClips.map(c => {
+          const clipDur = c.endTime - c.startTime;
+          // Bonus for clips near the viral ideal duration
+          const durMatch = 1 - Math.min(1, Math.abs(clipDur - idealDur) / 30);
+          const viralBoost = durMatch * 1.5;
+          return { ...c, score: c.score + viralBoost, viralBoost: viralBoost.toFixed(2) };
+        });
+        topClips.sort((a, b) => b.score - a.score);
+      }
+
       // Create song in DB
       const song = await createSong({ name: f.name, duration: res.duration, bpm: res.bpm, shareLink: "" });
       // Upload audio to storage
       await uploadAudio(f, song.id);
       // Save AI clips
-      await saveAiClips(song.id, res.topClips);
+      await saveAiClips(song.id, topClips);
       // Refresh songs list
       const allSongs = await getSongs(); setSongs(allSongs);
-      setActiveSong(song.id); setAiClips(res.topClips);
-      setClips(res.topClips.map((c, i) => ({ ...c, id: `a${i}`, isManual: false, notes: "", dur: Math.round(c.endTime - c.startTime), origStart: c.startTime, origEnd: c.endTime })));
+      setActiveSong(song.id); setAiClips(topClips);
+      setClips(topClips.map((c, i) => ({ ...c, id: `a${i}`, isManual: false, notes: "", dur: Math.round(c.endTime - c.startTime), origStart: c.startTime, origEnd: c.endTime })));
       setSel(0); setDl({}); setZoom(null); setPage("analyze");
     } catch (e2) { console.error(e2); flash("Error uploading — try again"); }
     setAnalyzing(false);
@@ -375,7 +408,7 @@ export default function App() {
               <input id="fi2" type="file" accept="audio/*" onChange={handleUpload} style={{ display: "none" }} />
             </div>
           </div>}
-          {analyzing && <div style={{ textAlign: "center", padding: 30 }}><div style={{ width: 36, height: 36, border: "3px solid rgba(0,240,255,0.12)", borderTop: "3px solid #00f0ff", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 12px" }} /><div style={{ fontSize: 12, color: "#7a7a8e" }}>Analyzing & uploading...</div></div>}
+          {analyzing && <div style={{ textAlign: "center", padding: 30 }}><div style={{ width: 36, height: 36, border: "3px solid rgba(0,240,255,0.12)", borderTop: "3px solid #00f0ff", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 12px" }} /><div style={{ fontSize: 12, color: "#7a7a8e" }}>Analyzing audio & checking viral database...</div></div>}
           {songs.length === 0 && !analyzing && <div style={{ textAlign: "center", padding: 40, border: "1px dashed rgba(255,255,255,0.06)", borderRadius: 12 }}><div style={{ fontSize: 28, opacity: 0.3, marginBottom: 8 }}>📂</div><div style={{ color: "#555", fontSize: 12 }}>{isLeader ? "Upload a song to get started" : "No songs assigned yet"}</div></div>}
           <div style={{ display: "grid", gap: 8 }}>{songs.map(song => <div key={song.id} style={{ ...cs(false), display: "flex", alignItems: "center", gap: 10, overflow: "hidden" }} onClick={() => isLeader ? loadReview(song.id) : loadSubmit(song.id)}>
             <div style={{ width: 38, height: 38, borderRadius: 8, background: "linear-gradient(135deg,rgba(0,240,255,0.1),rgba(179,102,255,0.1))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, flexShrink: 0 }}>🎵</div>
@@ -394,6 +427,28 @@ export default function App() {
             <div style={{ marginLeft: "auto" }}><button onClick={() => loadReview(activeSong)} style={bs(true)}>Team Review →</button></div>
           </div>
           <div style={{ background: "rgba(0,240,255,0.02)", border: "1px solid rgba(0,240,255,0.06)", borderRadius: 7, padding: "7px 11px", marginBottom: 12, fontSize: 10, color: "#00f0ff" }}>🔒 AI analysis is private — your team won't see these</div>
+          {viralInfo && viralInfo.matches.length > 0 && <div style={{ background: "linear-gradient(135deg,rgba(255,215,0,0.06),rgba(255,136,68,0.04))", border: "1px solid rgba(255,215,0,0.2)", borderRadius: 8, padding: "10px 14px", marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+              <span style={{ fontSize: 14 }}>🔥</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "#ffd700" }}>Viral Intelligence</span>
+              <span style={{ fontSize: 8, fontFamily: "monospace", color: "#ff8844", background: "rgba(255,136,68,0.1)", padding: "1px 6px", borderRadius: 3 }}>{viralInfo.matchType === 'exact' ? 'MATCH' : 'SIMILAR'}</span>
+            </div>
+            <div style={{ fontSize: 10, color: "#ccc", marginBottom: 4 }}>
+              Found <strong style={{ color: "#ffd700" }}>{viralInfo.matches.length}</strong> trending TikTok sound{viralInfo.matches.length > 1 ? 's' : ''} matching this song
+            </div>
+            {viralInfo.topMatch && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", fontSize: 9, fontFamily: "monospace", color: "#aaa" }}>
+              <span>🎵 "{viralInfo.topMatch.title}" by {viralInfo.topMatch.artist}</span>
+              {viralInfo.topMatch.usage_count > 0 && <span style={{ color: "#ff8844" }}>📊 {viralInfo.topMatch.usage_count.toLocaleString()} TikToks</span>}
+              {viralInfo.topMatch.sound_duration > 0 && <span>⏱ {Math.round(viralInfo.topMatch.sound_duration)}s clip</span>}
+              {viralInfo.topMatch.sub_genre && <span style={{ color: "#b366ff" }}>🏷 {viralInfo.topMatch.sub_genre}</span>}
+            </div>}
+            {viralInfo.patterns?.clip_duration && <div style={{ marginTop: 6, fontSize: 9, color: "#999" }}>
+              💡 {viralInfo.genre} viral clips average <strong style={{ color: "#ffd700" }}>{viralInfo.patterns.clip_duration.avg_duration}s</strong> — AI scoring boosted for this pattern
+            </div>}
+          </div>}
+          {viralInfo && viralInfo.matches.length === 0 && <div style={{ background: "rgba(255,255,255,0.015)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 7, padding: "7px 11px", marginBottom: 12, fontSize: 9, color: "#7a7a8e" }}>
+            🔍 No viral TikTok matches found — using waveform analysis only
+          </div>}
           {hasAudio && <div style={{ marginBottom: 16 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5, flexWrap: "wrap", gap: 6 }}>
               <button onClick={() => createClip(lastTapTime || (playheadTime || 0), null)} style={{ background: "linear-gradient(135deg,rgba(255,215,0,0.15),rgba(255,215,0,0.05))", border: "1px solid rgba(255,215,0,0.3)", color: "#ffd700", fontSize: 10, fontWeight: 600, padding: "5px 12px", borderRadius: 6, cursor: "pointer", fontFamily: "monospace" }}>+ New Clip</button>

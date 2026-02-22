@@ -1,6 +1,6 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
-import { getSongs, createSong, deleteSong as dbDeleteSong, uploadAudio, getAudioUrl, saveAiClips, getAiClips, submitPicks as dbSubmitPicks, getSubmissions, subscribeToSubmissions, findViralMatch, getViralPatterns, getTopViralSounds } from "../lib/supabase";
+import { getSongs, createSong, deleteSong as dbDeleteSong, uploadAudio, getAudioUrl, saveAiClips, getAiClips, submitPicks as dbSubmitPicks, getSubmissions, subscribeToSubmissions, findViralMatch, getViralPatterns, getTopViralSounds, getViralPositionPatterns } from "../lib/supabase";
 
 /* ═══ AUDIO ANALYSIS ═══ */
 function analyzeAudio(audioBuffer) {
@@ -177,6 +177,7 @@ export default function App() {
   const [playingFull, setPlayingFull] = useState(false), [fullProgress, setFullProgress] = useState(0);
   const [activeRange, setActiveRange] = useState(null);
   const [viralInfo, setViralInfo] = useState(null); // { matches, matchType, patterns, genre }
+  const [selectedGenre, setSelectedGenre] = useState(null); // genre for viral intelligence
 
   // Load user from localStorage & songs from Supabase
   useEffect(() => {
@@ -227,35 +228,70 @@ export default function App() {
       const ctx = new (window.AudioContext || window.webkitAudioContext)(); actx.current = ctx;
       const buf = await ctx.decodeAudioData(await f.arrayBuffer()); abuf.current = buf;
       const res = analyzeAudio(buf); setAnalysis(res); setEnergy(res.energy); scoreFn.current = res.scoreClip;
+      const duration = res.duration;
       
       // ═══ VIRAL INTELLIGENCE ═══
       let viralData = null;
+      let positionPattern = null;
+      const genre = selectedGenre;
+
       try {
+        // 1. Check for direct song match in viral database
         const viral = await findViralMatch(f.name);
         if (viral.matches.length > 0) {
           const topMatch = viral.matches[0];
-          const genre = topMatch.genre || topMatch.sub_genre;
-          const patterns = genre ? await getViralPatterns(genre) : null;
-          viralData = { ...viral, patterns, genre: topMatch.genre, topMatch };
-          setViralInfo(viralData);
-        } else {
-          setViralInfo({ matches: [], matchType: 'none', patterns: null });
+          const matchGenre = genre || topMatch.genre;
+          const patterns = matchGenre ? await getViralPatterns(matchGenre) : null;
+          viralData = { ...viral, patterns, genre: matchGenre, topMatch };
         }
+
+        // 2. Fetch learned position patterns for genre (from audio matching pipeline)
+        if (genre) {
+          positionPattern = await getViralPositionPatterns(genre);
+        }
+
+        setViralInfo({ 
+          ...(viralData || { matches: [], matchType: 'none' }),
+          positionPattern, 
+          genre,
+          patterns: viralData?.patterns || null
+        });
       } catch (ve) { console.log('Viral lookup skipped:', ve.message); }
 
-      // Boost AI clip scoring with viral pattern data
+      // ═══ RE-SCORE CLIPS WITH VIRAL POSITION DATA ═══
       let topClips = res.topClips;
-      if (viralData?.patterns?.clip_duration) {
-        const idealDur = viralData.patterns.clip_duration.median_duration || 30;
-        // Re-score clips with viral intelligence weighting
+      if (positionPattern && positionPattern.avg_start_position_pct != null) {
+        const idealPct = positionPattern.avg_start_position_pct / 100;
+        const medianPct = (positionPattern.median_start_position_pct || positionPattern.avg_start_position_pct) / 100;
+        const rangeLow = (positionPattern.position_range?.min || 0) / 100;
+        const rangeHigh = (positionPattern.position_range?.max || 100) / 100;
+
         topClips = topClips.map(c => {
-          const clipDur = c.endTime - c.startTime;
-          // Bonus for clips near the viral ideal duration
-          const durMatch = 1 - Math.min(1, Math.abs(clipDur - idealDur) / 30);
-          const viralBoost = durMatch * 1.5;
-          return { ...c, score: c.score + viralBoost, viralBoost: viralBoost.toFixed(2) };
+          const clipPct = c.startTime / duration;
+          // How close is this clip to the genre's ideal viral position?
+          const distFromIdeal = Math.abs(clipPct - idealPct);
+          const distFromMedian = Math.abs(clipPct - medianPct);
+          const bestDist = Math.min(distFromIdeal, distFromMedian);
+          
+          // Strong boost for clips within the typical viral range
+          const inRange = clipPct >= rangeLow && clipPct <= rangeHigh;
+          const positionScore = inRange ? (1 - bestDist) * 3.0 : (1 - bestDist) * 1.0;
+          
+          return { 
+            ...c, 
+            score: c.score + positionScore, 
+            viralBoost: positionScore.toFixed(2),
+            viralPct: Math.round(clipPct * 100)
+          };
         });
         topClips.sort((a, b) => b.score - a.score);
+        // Re-select top 5 with spacing
+        const reranked = [];
+        for (const c of topClips) {
+          if (reranked.every(t => Math.abs(t.startTime - c.startTime) > 5)) reranked.push(c);
+          if (reranked.length >= 5) break;
+        }
+        topClips = reranked;
       }
 
       // Create song in DB
@@ -402,6 +438,23 @@ export default function App() {
         {page === "home" && <div>
           <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>{isLeader ? "Your Songs" : "Assigned Songs"}</h2>
           {isLeader && <div style={{ marginBottom: 20 }}>
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 9, fontFamily: "monospace", color: "#555", marginBottom: 6, letterSpacing: 1 }}>SELECT GENRE FOR AI INTELLIGENCE</div>
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                {[["country","🤠"],["hiphop","🎤"],["pop","🎵"],["edm","🎧"],["rnb","🎶"],["rock","🎸"],["indie","🌿"],["latin","💃"]].map(([g, icon]) =>
+                  <button key={g} onClick={() => setSelectedGenre(selectedGenre === g ? null : g)} style={{
+                    background: selectedGenre === g ? "rgba(255,215,0,0.12)" : "rgba(255,255,255,0.03)",
+                    border: `1px solid ${selectedGenre === g ? "rgba(255,215,0,0.35)" : "rgba(255,255,255,0.07)"}`,
+                    color: selectedGenre === g ? "#ffd700" : "#7a7a8e",
+                    padding: "5px 10px", borderRadius: 6, fontSize: 11, cursor: "pointer",
+                    fontFamily: "monospace", transition: "all 0.2s"
+                  }}>{icon} {g}</button>
+                )}
+              </div>
+              {selectedGenre && <div style={{ fontSize: 9, color: "#ffd700", fontFamily: "monospace", marginTop: 4 }}>
+                🔥 AI will use {selectedGenre} viral patterns to optimize clip suggestions
+              </div>}
+            </div>
             <div onDrop={handleUpload} onDragOver={e => e.preventDefault()} onClick={() => document.getElementById("fi2").click()} style={{ border: "2px dashed rgba(0,240,255,0.15)", borderRadius: 12, padding: "24px 16px", textAlign: "center", cursor: "pointer", background: "rgba(0,240,255,0.01)" }}>
               <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 3 }}>Upload audio</div>
               <div style={{ fontSize: 10, color: "#7a7a8e" }}>Drop file or click · MP3, WAV, M4A, AAC, OGG, FLAC</div>
@@ -427,7 +480,7 @@ export default function App() {
             <div style={{ marginLeft: "auto" }}><button onClick={() => loadReview(activeSong)} style={bs(true)}>Team Review →</button></div>
           </div>
           <div style={{ background: "rgba(0,240,255,0.02)", border: "1px solid rgba(0,240,255,0.06)", borderRadius: 7, padding: "7px 11px", marginBottom: 12, fontSize: 10, color: "#00f0ff" }}>🔒 AI analysis is private — your team won't see these</div>
-          {viralInfo && viralInfo.matches.length > 0 && <div style={{ background: "linear-gradient(135deg,rgba(255,215,0,0.06),rgba(255,136,68,0.04))", border: "1px solid rgba(255,215,0,0.2)", borderRadius: 8, padding: "10px 14px", marginBottom: 12 }}>
+          {viralInfo && viralInfo.matches && viralInfo.matches.length > 0 && <div style={{ background: "linear-gradient(135deg,rgba(255,215,0,0.06),rgba(255,136,68,0.04))", border: "1px solid rgba(255,215,0,0.2)", borderRadius: 8, padding: "10px 14px", marginBottom: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
               <span style={{ fontSize: 14 }}>🔥</span>
               <span style={{ fontSize: 11, fontWeight: 700, color: "#ffd700" }}>Viral Intelligence</span>
@@ -442,12 +495,23 @@ export default function App() {
               {viralInfo.topMatch.sound_duration > 0 && <span>⏱ {Math.round(viralInfo.topMatch.sound_duration)}s clip</span>}
               {viralInfo.topMatch.sub_genre && <span style={{ color: "#b366ff" }}>🏷 {viralInfo.topMatch.sub_genre}</span>}
             </div>}
-            {viralInfo.patterns?.clip_duration && <div style={{ marginTop: 6, fontSize: 9, color: "#999" }}>
-              💡 {viralInfo.genre} viral clips average <strong style={{ color: "#ffd700" }}>{viralInfo.patterns.clip_duration.avg_duration}s</strong> — AI scoring boosted for this pattern
-            </div>}
           </div>}
-          {viralInfo && viralInfo.matches.length === 0 && <div style={{ background: "rgba(255,255,255,0.015)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 7, padding: "7px 11px", marginBottom: 12, fontSize: 9, color: "#7a7a8e" }}>
-            🔍 No viral TikTok matches found — using waveform analysis only
+          {viralInfo?.positionPattern && <div style={{ background: "linear-gradient(135deg,rgba(0,240,255,0.04),rgba(179,102,255,0.03))", border: "1px solid rgba(0,240,255,0.15)", borderRadius: 8, padding: "10px 14px", marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+              <span style={{ fontSize: 14 }}>🧠</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "#00f0ff" }}>Learned Pattern: {viralInfo.genre}</span>
+              <span style={{ fontSize: 8, fontFamily: "monospace", color: "#44ff88", background: "rgba(68,255,136,0.1)", padding: "1px 6px", borderRadius: 3 }}>{viralInfo.positionPattern.sample_size} SONGS ANALYZED</span>
+            </div>
+            <div style={{ fontSize: 10, color: "#ccc", marginBottom: 4 }}>
+              Viral {viralInfo.genre} clips start avg <strong style={{ color: "#00f0ff" }}>{viralInfo.positionPattern.avg_start_position_pct}%</strong> through the song
+              <span style={{ color: "#7a7a8e" }}> (range: {viralInfo.positionPattern.position_range?.min}–{viralInfo.positionPattern.position_range?.max}%)</span>
+            </div>
+            <div style={{ fontSize: 9, color: "#999" }}>
+              💡 AI clip scoring boosted for positions matching this pattern
+            </div>
+          </div>}
+          {viralInfo && !viralInfo.positionPattern && (!viralInfo.matches || viralInfo.matches.length === 0) && <div style={{ background: "rgba(255,255,255,0.015)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 7, padding: "7px 11px", marginBottom: 12, fontSize: 9, color: "#7a7a8e" }}>
+            🔍 No genre selected — using waveform analysis only. Go back and select a genre for smarter AI suggestions.
           </div>}
           {hasAudio && <div style={{ marginBottom: 16 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5, flexWrap: "wrap", gap: 6 }}>

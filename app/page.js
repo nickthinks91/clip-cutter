@@ -202,7 +202,7 @@ export default function App() {
   const setupUser = (name, role) => { const u = { name: name.trim(), role }; setUser(u); localStorage.setItem("cc-user", JSON.stringify(u)); };
   const isLeader = user?.role === "leader";
   const hasAudio = energy.length > 0;
-  const activeSongData = songs.find(s => s.id === activeSong);
+  const activeSongData = songs.find(s => s.id === activeSong) || albumSongs.find(s => s.id === activeSong);
 
   // Stream audio from Supabase storage
   const loadAudioFromUrl = async (url) => {
@@ -400,7 +400,7 @@ export default function App() {
   const retractClip = async (idx) => { const newClips = clips.filter((_, i) => i !== idx); setClips(newClips); if (sel >= idx && sel > 0) setSel(sel - 1); if (submitted && activeSong) { if (newClips.length > 0) { await dbSubmitPicks(activeSong, user.name, newClips.map(c => ({ startTime: c.startTime, endTime: c.endTime, notes: c.notes || "", dur: c.dur }))); flash("Clip retracted — submission updated"); } else { await dbSubmitPicks(activeSong, user.name, []); setSubmitted(false); flash("All clips retracted"); } } };
 
   const loadReview = async songId => {
-    const song = songs.find(s => s.id === songId);
+    const song = songs.find(s => s.id === songId) || albumSongs.find(s => s.id === songId);
     const sameSong = songId === activeSong;
     setActiveSong(songId);
     const s = await getSubmissions(songId);
@@ -417,7 +417,7 @@ export default function App() {
   };
 
   const loadSubmit = async songId => {
-    const song = songs.find(s => s.id === songId);
+    const song = songs.find(s => s.id === songId) || albumSongs.find(s => s.id === songId);
     setActiveSong(songId); setClips([]); setSel(0); setZoom(null); setSubmitted(false); setEnergy([]); setAnalysis(null); setPage("submit");
     // Auto-stream audio if available
     if (song?.audio_path) {
@@ -449,7 +449,6 @@ export default function App() {
     const audioFiles = [];
     for (const f of files) {
       if (f.name.endsWith('.zip')) {
-        // Extract zip
         setAlbumUploadProgress("Extracting zip...");
         try {
           const JSZip = (await import('jszip')).default;
@@ -473,24 +472,22 @@ export default function App() {
 
     for (let i = 0; i < audioFiles.length; i++) {
       const af = audioFiles[i];
-      setAlbumUploadProgress(`Uploading ${i + 1}/${audioFiles.length}: ${af.name}`);
+      setAlbumUploadProgress(`Uploading ${i + 1}/${audioFiles.length}: ${af.name.replace(/\.[^.]+$/, '').slice(0, 40)}`);
       try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const buf = await ctx.decodeAudioData(await af.arrayBuffer());
-        const res = analyzeAudio(buf);
         const songName = af.name.replace(/\.[^.]+$/, '');
-        const song = await createSong({ name: songName, duration: res.duration, bpm: res.bpm, shareLink: "", albumId: activeAlbum, trackNumber: trackNum });
+        // Just create the song and upload — NO audio analysis yet
+        // Analysis happens when someone opens the song to cut clips
+        const song = await createSong({ name: songName, duration: 0, bpm: 0, shareLink: "", albumId: activeAlbum, trackNumber: trackNum });
         await uploadAudio(af, song.id);
-        await saveAiClips(song.id, res.topClips);
         trackNum++;
-        ctx.close();
-      } catch (ue) { console.error('Upload error:', ue); }
+      } catch (ue) { console.error('Upload error for', af.name, ue); }
     }
 
     await updateAlbum(activeAlbum, { track_count: trackNum });
     const updatedSongs = await getAlbumSongs(activeAlbum);
     setAlbumSongs(updatedSongs);
     setSongs(await getSongs());
+    setAlbums(await getAlbums());
     setAlbumUploading(false);
     setAlbumUploadProgress("");
     flash(`${audioFiles.length} song${audioFiles.length > 1 ? 's' : ''} added!`);

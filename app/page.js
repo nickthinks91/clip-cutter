@@ -1,6 +1,6 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
-import { getSongs, createSong, deleteSong as dbDeleteSong, uploadAudio, getAudioUrl, saveAiClips, getAiClips, submitPicks as dbSubmitPicks, getSubmissions, subscribeToSubmissions, findViralMatch, getViralPatterns, getTopViralSounds, getViralPositionPatterns } from "../lib/supabase";
+import { getSongs, createSong, deleteSong as dbDeleteSong, uploadAudio, getAudioUrl, saveAiClips, getAiClips, submitPicks as dbSubmitPicks, getSubmissions, subscribeToSubmissions, findViralMatch, getViralPatterns, getTopViralSounds, getViralPositionPatterns, getAlbums, createAlbum, updateAlbum, deleteAlbum, getAlbumSongs, getAlbumProgress, getAlbumAllProgress, updateSong } from "../lib/supabase";
 
 /* ═══ AUDIO ANALYSIS ═══ */
 function analyzeAudio(audioBuffer) {
@@ -178,6 +178,16 @@ export default function App() {
   const [activeRange, setActiveRange] = useState(null);
   const [viralInfo, setViralInfo] = useState(null); // { matches, matchType, patterns, genre }
   const [selectedGenre, setSelectedGenre] = useState(null); // genre for viral intelligence
+  const [albums, setAlbums] = useState([]);
+  const [activeAlbum, setActiveAlbum] = useState(null);
+  const [albumSongs, setAlbumSongs] = useState([]);
+  const [albumProgress, setAlbumProgress] = useState(null);
+  const [albumTeamProgress, setAlbumTeamProgress] = useState({});
+  const [newAlbumName, setNewAlbumName] = useState("");
+  const [albumUploading, setAlbumUploading] = useState(false);
+  const [albumUploadProgress, setAlbumUploadProgress] = useState("");
+  const [editingSongId, setEditingSongId] = useState(null);
+  const [editingSongName, setEditingSongName] = useState("");
 
   // Load user from localStorage & songs from Supabase
   useEffect(() => {
@@ -185,6 +195,7 @@ export default function App() {
     if (saved) setUser(JSON.parse(saved));
     setUserLoaded(true);
     getSongs().then(setSongs).catch(console.error);
+    getAlbums().then(setAlbums).catch(console.error);
   }, []);
 
   const flash = msg => { setNotice(msg); setTimeout(() => setNotice(null), 2500); };
@@ -266,32 +277,45 @@ export default function App() {
         const rangeLow = (positionPattern.position_range?.min || 0) / 100;
         const rangeHigh = (positionPattern.position_range?.max || 100) / 100;
 
-        topClips = topClips.map(c => {
-          const clipPct = c.startTime / duration;
-          // How close is this clip to the genre's ideal viral position?
+        // Generate NEW candidates focused around the viral sweet spot
+        // Scan every 2 seconds across the full song, score with position weighting
+        const allCands = [];
+        const step = 2;
+        for (let st = 0; st + 60 <= duration; st += step) {
+          const et = st + 60;
+          const baseScore = res.scoreClip(st, et);
+          const clipPct = st / duration;
+          
+          // Position scoring - gaussian-like curve centered on ideal position
           const distFromIdeal = Math.abs(clipPct - idealPct);
           const distFromMedian = Math.abs(clipPct - medianPct);
           const bestDist = Math.min(distFromIdeal, distFromMedian);
-          
-          // Strong boost for clips within the typical viral range
           const inRange = clipPct >= rangeLow && clipPct <= rangeHigh;
-          const positionScore = inRange ? (1 - bestDist) * 3.0 : (1 - bestDist) * 1.0;
           
-          return { 
-            ...c, 
-            score: c.score + positionScore, 
-            viralBoost: positionScore.toFixed(2),
+          // Position is now 60% of the total score, energy is 40%
+          const positionWeight = inRange 
+            ? Math.exp(-bestDist * bestDist * 20) * 10  // strong gaussian boost in range
+            : Math.exp(-bestDist * bestDist * 8) * 3;   // weaker outside range
+          const combinedScore = baseScore.score * 0.4 + positionWeight * 0.6;
+          
+          allCands.push({
+            ...baseScore,
+            startTime: st,
+            endTime: et,
+            score: combinedScore,
+            viralBoost: positionWeight.toFixed(2),
             viralPct: Math.round(clipPct * 100)
-          };
-        });
-        topClips.sort((a, b) => b.score - a.score);
-        // Re-select top 5 with spacing
-        const reranked = [];
-        for (const c of topClips) {
-          if (reranked.every(t => Math.abs(t.startTime - c.startTime) > 5)) reranked.push(c);
-          if (reranked.length >= 5) break;
+          });
         }
-        topClips = reranked;
+        
+        allCands.sort((a, b) => b.score - a.score);
+        
+        // Pick top 5 with at least 10s spacing
+        topClips = [];
+        for (const c of allCands) {
+          if (topClips.every(t => Math.abs(t.startTime - c.startTime) > 10)) topClips.push(c);
+          if (topClips.length >= 5) break;
+        }
       }
 
       // Create song in DB
@@ -403,7 +427,104 @@ export default function App() {
   };
 
   const refreshSubs = async () => { if (!activeSong) return; const s = await getSubmissions(activeSong); setSubs(s); setConsensus(buildConsensus(s)); flash("Refreshed!"); };
-  const delSong = async id => { await dbDeleteSong(id); const allSongs = await getSongs(); setSongs(allSongs); };
+  const delSong = async id => { await dbDeleteSong(id); const allSongs = await getSongs(); setSongs(allSongs); if (activeAlbum) { const as = await getAlbumSongs(activeAlbum); setAlbumSongs(as); } };
+
+  // ═══ ALBUM FUNCTIONS ═══
+  const handleCreateAlbum = async () => {
+    if (!newAlbumName.trim()) return;
+    const album = await createAlbum({ name: newAlbumName.trim(), genre: selectedGenre });
+    setAlbums(await getAlbums());
+    setNewAlbumName("");
+    setActiveAlbum(album.id);
+    setAlbumSongs([]);
+    setPage("album");
+  };
+
+  const handleAlbumUpload = async (e) => {
+    const files = e.target?.files || e.dataTransfer?.files;
+    if (!files?.length || !activeAlbum) return;
+    e.preventDefault?.();
+    setAlbumUploading(true);
+
+    const audioFiles = [];
+    for (const f of files) {
+      if (f.name.endsWith('.zip')) {
+        // Extract zip
+        setAlbumUploadProgress("Extracting zip...");
+        try {
+          const JSZip = (await import('jszip')).default;
+          const zip = await JSZip.loadAsync(await f.arrayBuffer());
+          const entries = Object.values(zip.files).filter(e => !e.dir && /\.(mp3|wav|m4a|aac|ogg|flac)$/i.test(e.name));
+          for (const entry of entries) {
+            const blob = await entry.async('blob');
+            const name = entry.name.split('/').pop();
+            audioFiles.push(new File([blob], name, { type: 'audio/' + name.split('.').pop() }));
+          }
+        } catch (ze) { console.error('Zip error:', ze); flash("Error extracting zip"); }
+      } else if (/\.(mp3|wav|m4a|aac|ogg|flac)$/i.test(f.name)) {
+        audioFiles.push(f);
+      }
+    }
+
+    if (!audioFiles.length) { setAlbumUploading(false); flash("No audio files found"); return; }
+
+    const existingSongs = await getAlbumSongs(activeAlbum);
+    let trackNum = existingSongs.length;
+
+    for (let i = 0; i < audioFiles.length; i++) {
+      const af = audioFiles[i];
+      setAlbumUploadProgress(`Uploading ${i + 1}/${audioFiles.length}: ${af.name}`);
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const buf = await ctx.decodeAudioData(await af.arrayBuffer());
+        const res = analyzeAudio(buf);
+        const songName = af.name.replace(/\.[^.]+$/, '');
+        const song = await createSong({ name: songName, duration: res.duration, bpm: res.bpm, shareLink: "", albumId: activeAlbum, trackNumber: trackNum });
+        await uploadAudio(af, song.id);
+        await saveAiClips(song.id, res.topClips);
+        trackNum++;
+        ctx.close();
+      } catch (ue) { console.error('Upload error:', ue); }
+    }
+
+    await updateAlbum(activeAlbum, { track_count: trackNum });
+    const updatedSongs = await getAlbumSongs(activeAlbum);
+    setAlbumSongs(updatedSongs);
+    setSongs(await getSongs());
+    setAlbumUploading(false);
+    setAlbumUploadProgress("");
+    flash(`${audioFiles.length} song${audioFiles.length > 1 ? 's' : ''} added!`);
+  };
+
+  const loadAlbum = async (albumId) => {
+    setActiveAlbum(albumId);
+    const as = await getAlbumSongs(albumId);
+    setAlbumSongs(as);
+    if (!isLeader && user) {
+      const prog = await getAlbumProgress(albumId, user.name);
+      setAlbumProgress(prog);
+    }
+    if (isLeader) {
+      const tp = await getAlbumAllProgress(albumId);
+      setAlbumTeamProgress(tp);
+    }
+    setPage("album");
+  };
+
+  const renameSong = async (songId, newName) => {
+    await updateSong(songId, { name: newName });
+    const updatedSongs = await getAlbumSongs(activeAlbum);
+    setAlbumSongs(updatedSongs);
+    setSongs(await getSongs());
+    setEditingSongId(null);
+    setEditingSongName("");
+  };
+
+  const delAlbum = async (id) => {
+    await deleteAlbum(id);
+    setAlbums(await getAlbums());
+    setSongs(await getSongs());
+  };
 
   // Realtime subscription
   useEffect(() => {
@@ -436,39 +557,131 @@ export default function App() {
 
         {/* HOME */}
         {page === "home" && <div>
-          <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>{isLeader ? "Your Songs" : "Assigned Songs"}</h2>
+          <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>{isLeader ? "Dashboard" : "Assigned Work"}</h2>
+          
+          {/* LEADER: Create Album */}
           {isLeader && <div style={{ marginBottom: 20 }}>
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 9, fontFamily: "monospace", color: "#555", marginBottom: 6, letterSpacing: 1 }}>SELECT GENRE FOR AI INTELLIGENCE</div>
-              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                {[["country","🤠"],["hiphop","🎤"],["pop","🎵"],["edm","🎧"],["rnb","🎶"],["rock","🎸"],["indie","🌿"],["latin","💃"]].map(([g, icon]) =>
-                  <button key={g} onClick={() => setSelectedGenre(selectedGenre === g ? null : g)} style={{
-                    background: selectedGenre === g ? "rgba(255,215,0,0.12)" : "rgba(255,255,255,0.03)",
-                    border: `1px solid ${selectedGenre === g ? "rgba(255,215,0,0.35)" : "rgba(255,255,255,0.07)"}`,
-                    color: selectedGenre === g ? "#ffd700" : "#7a7a8e",
-                    padding: "5px 10px", borderRadius: 6, fontSize: 11, cursor: "pointer",
-                    fontFamily: "monospace", transition: "all 0.2s"
-                  }}>{icon} {g}</button>
-                )}
-              </div>
-              {selectedGenre && <div style={{ fontSize: 9, color: "#ffd700", fontFamily: "monospace", marginTop: 4 }}>
-                🔥 AI will use {selectedGenre} viral patterns to optimize clip suggestions
-              </div>}
+            <div style={{ fontSize: 9, fontFamily: "monospace", color: "#555", marginBottom: 6, letterSpacing: 1 }}>CREATE ALBUM</div>
+            <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+              <input type="text" value={newAlbumName} onChange={e => setNewAlbumName(e.target.value)} placeholder="Album name (e.g. Artist X - Untitled)" onKeyDown={e => { if (e.key === "Enter") handleCreateAlbum(); }} style={{ flex: 1, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "10px 12px", color: "#e8e8f0", fontSize: 12, outline: "none" }} />
+              <button onClick={handleCreateAlbum} disabled={!newAlbumName.trim()} style={{ ...bs(!!newAlbumName.trim()), padding: "8px 16px", fontSize: 12, fontWeight: 600, opacity: newAlbumName.trim() ? 1 : 0.3 }}>+ Album</button>
             </div>
-            <div onDrop={handleUpload} onDragOver={e => e.preventDefault()} onClick={() => document.getElementById("fi2").click()} style={{ border: "2px dashed rgba(0,240,255,0.15)", borderRadius: 12, padding: "24px 16px", textAlign: "center", cursor: "pointer", background: "rgba(0,240,255,0.01)" }}>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 3 }}>Upload audio</div>
-              <div style={{ fontSize: 10, color: "#7a7a8e" }}>Drop file or click · MP3, WAV, M4A, AAC, OGG, FLAC</div>
+            <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 8 }}>
+              {[["country","🤠"],["hiphop","🎤"],["pop","🎵"],["edm","🎧"],["rnb","🎶"],["rock","🎸"],["indie","🌿"],["latin","💃"]].map(([g, icon]) =>
+                <button key={g} onClick={() => setSelectedGenre(selectedGenre === g ? null : g)} style={{
+                  background: selectedGenre === g ? "rgba(255,215,0,0.12)" : "rgba(255,255,255,0.03)",
+                  border: `1px solid ${selectedGenre === g ? "rgba(255,215,0,0.35)" : "rgba(255,255,255,0.07)"}`,
+                  color: selectedGenre === g ? "#ffd700" : "#7a7a8e",
+                  padding: "4px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", fontFamily: "monospace"
+                }}>{icon} {g}</button>
+              )}
+            </div>
+          </div>}
+
+          {/* ALBUMS LIST */}
+          {albums.length > 0 && <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 9, fontFamily: "monospace", color: "#555", marginBottom: 8, letterSpacing: 1 }}>ALBUMS</div>
+            <div style={{ display: "grid", gap: 8 }}>{albums.map(album => <div key={album.id} onClick={() => loadAlbum(album.id)} style={{ ...cs(false), display: "flex", alignItems: "center", gap: 10, overflow: "hidden" }}>
+              <div style={{ width: 42, height: 42, borderRadius: 8, background: "linear-gradient(135deg,rgba(179,102,255,0.15),rgba(255,51,102,0.1))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>💿</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{album.name}</div>
+                <div style={{ fontSize: 10, color: "#7a7a8e", fontFamily: "monospace" }}>{album.track_count || 0} tracks{album.genre ? ` · ${album.genre}` : ""}</div>
+              </div>
+              {isLeader && <button onClick={ev => { ev.stopPropagation(); delAlbum(album.id); }} style={{ background: "rgba(255,51,102,0.05)", border: "1px solid rgba(255,51,102,0.1)", color: "#ff3366", fontSize: 8, padding: "3px 7px", borderRadius: 4, cursor: "pointer", fontFamily: "monospace", flexShrink: 0 }}>Delete</button>}
+              <div style={{ fontSize: 10, color: "#b366ff", fontFamily: "monospace", flexShrink: 0 }}>Open →</div>
+            </div>)}</div>
+          </div>}
+
+          {/* STANDALONE SONGS (not in albums) */}
+          {isLeader && <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 9, fontFamily: "monospace", color: "#555", marginBottom: 6, letterSpacing: 1 }}>SINGLE SONGS</div>
+            <div onDrop={handleUpload} onDragOver={e => e.preventDefault()} onClick={() => document.getElementById("fi2").click()} style={{ border: "2px dashed rgba(0,240,255,0.15)", borderRadius: 12, padding: "16px 12px", textAlign: "center", cursor: "pointer", background: "rgba(0,240,255,0.01)", marginBottom: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2 }}>Upload single song</div>
+              <div style={{ fontSize: 9, color: "#7a7a8e" }}>Drop file or click · MP3, WAV, M4A, AAC, OGG, FLAC</div>
               <input id="fi2" type="file" accept="audio/*" onChange={handleUpload} style={{ display: "none" }} />
             </div>
           </div>}
           {analyzing && <div style={{ textAlign: "center", padding: 30 }}><div style={{ width: 36, height: 36, border: "3px solid rgba(0,240,255,0.12)", borderTop: "3px solid #00f0ff", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 12px" }} /><div style={{ fontSize: 12, color: "#7a7a8e" }}>Analyzing audio & checking viral database...</div></div>}
-          {songs.length === 0 && !analyzing && <div style={{ textAlign: "center", padding: 40, border: "1px dashed rgba(255,255,255,0.06)", borderRadius: 12 }}><div style={{ fontSize: 28, opacity: 0.3, marginBottom: 8 }}>📂</div><div style={{ color: "#555", fontSize: 12 }}>{isLeader ? "Upload a song to get started" : "No songs assigned yet"}</div></div>}
-          <div style={{ display: "grid", gap: 8 }}>{songs.map(song => <div key={song.id} style={{ ...cs(false), display: "flex", alignItems: "center", gap: 10, overflow: "hidden" }} onClick={() => isLeader ? loadReview(song.id) : loadSubmit(song.id)}>
+          
+          {/* Standalone songs list */}
+          {songs.filter(s => !s.album_id).length > 0 && <div style={{ display: "grid", gap: 8 }}>{songs.filter(s => !s.album_id).map(song => <div key={song.id} style={{ ...cs(false), display: "flex", alignItems: "center", gap: 10, overflow: "hidden" }} onClick={() => isLeader ? loadReview(song.id) : loadSubmit(song.id)}>
             <div style={{ width: 38, height: 38, borderRadius: 8, background: "linear-gradient(135deg,rgba(0,240,255,0.1),rgba(179,102,255,0.1))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, flexShrink: 0 }}>🎵</div>
             <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 600, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{song.name}</div><div style={{ fontSize: 10, color: "#7a7a8e", fontFamily: "monospace" }}>{song.duration > 0 ? `${fmt(song.duration)} · ~${song.bpm} BPM` : "pending"}</div></div>
             {isLeader && <button onClick={ev => { ev.stopPropagation(); delSong(song.id); }} style={{ background: "rgba(255,51,102,0.05)", border: "1px solid rgba(255,51,102,0.1)", color: "#ff3366", fontSize: 8, padding: "3px 7px", borderRadius: 4, cursor: "pointer", fontFamily: "monospace", flexShrink: 0 }}>Delete</button>}
             <div style={{ fontSize: 10, color: "#00f0ff", fontFamily: "monospace", flexShrink: 0, whiteSpace: "nowrap" }}>{isLeader ? "Review →" : "Submit →"}</div>
-          </div>)}</div>
+          </div>)}</div>}
+          
+          {albums.length === 0 && songs.length === 0 && !analyzing && <div style={{ textAlign: "center", padding: 40, border: "1px dashed rgba(255,255,255,0.06)", borderRadius: 12 }}><div style={{ fontSize: 28, opacity: 0.3, marginBottom: 8 }}>📂</div><div style={{ color: "#555", fontSize: 12 }}>{isLeader ? "Create an album or upload a song to get started" : "No assignments yet"}</div></div>}
+        </div>}
+
+        {/* ALBUM VIEW */}
+        {page === "album" && <div>
+          <button onClick={() => { setPage("home"); setActiveAlbum(null); }} style={{ ...bs(false), marginBottom: 12, fontSize: 9 }}>← Back</button>
+          {(() => { const album = albums.find(a => a.id === activeAlbum); if (!album) return null; return <>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+              <div style={{ fontSize: 28 }}>💿</div>
+              <div style={{ flex: 1 }}>
+                <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>{album.name}</h2>
+                <div style={{ fontSize: 10, color: "#7a7a8e", fontFamily: "monospace" }}>{albumSongs.length} tracks{album.genre ? ` · ${album.genre}` : ""}</div>
+              </div>
+            </div>
+
+            {/* Member progress bar */}
+            {!isLeader && albumProgress && <div style={{ background: "rgba(0,240,255,0.03)", border: "1px solid rgba(0,240,255,0.1)", borderRadius: 8, padding: "10px 14px", marginBottom: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <span style={{ fontSize: 11, fontWeight: 600, color: "#00f0ff" }}>Your Progress</span>
+                <span style={{ fontSize: 12, fontWeight: 800, color: albumProgress.completed === albumProgress.total ? "#44ff88" : "#00f0ff", fontFamily: "monospace" }}>{albumProgress.completed}/{albumProgress.total}</span>
+              </div>
+              <div style={{ height: 6, background: "rgba(255,255,255,0.06)", borderRadius: 3, overflow: "hidden" }}>
+                <div style={{ width: `${albumProgress.total > 0 ? (albumProgress.completed / albumProgress.total) * 100 : 0}%`, height: "100%", background: albumProgress.completed === albumProgress.total ? "linear-gradient(90deg,#44ff88,#00cc66)" : "linear-gradient(90deg,#00f0ff,#b366ff)", borderRadius: 3, transition: "width 0.3s" }} />
+              </div>
+              {albumProgress.completed === albumProgress.total && albumProgress.total > 0 && <div style={{ fontSize: 10, color: "#44ff88", marginTop: 4, textAlign: "center", fontWeight: 600 }}>✓ All songs completed!</div>}
+            </div>}
+
+            {/* Leader: team progress */}
+            {isLeader && Object.keys(albumTeamProgress).length > 0 && <div style={{ background: "rgba(179,102,255,0.03)", border: "1px solid rgba(179,102,255,0.1)", borderRadius: 8, padding: "10px 14px", marginBottom: 16 }}>
+              <div style={{ fontSize: 9, fontFamily: "monospace", color: "#b366ff", letterSpacing: 1, marginBottom: 6 }}>TEAM PROGRESS</div>
+              {Object.entries(albumTeamProgress).map(([name, p]) => <div key={name} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                <span style={{ fontSize: 11, color: "#ccc", minWidth: 60 }}>{name}</span>
+                <div style={{ flex: 1, height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}>
+                  <div style={{ width: `${p.total > 0 ? (p.completed / p.total) * 100 : 0}%`, height: "100%", background: p.completed === p.total ? "#44ff88" : "#b366ff", borderRadius: 2 }} />
+                </div>
+                <span style={{ fontSize: 10, fontFamily: "monospace", color: p.completed === p.total ? "#44ff88" : "#aaa" }}>{p.completed}/{p.total}</span>
+              </div>)}
+            </div>}
+
+            {/* Leader: add songs to album */}
+            {isLeader && <div style={{ marginBottom: 16 }}>
+              <div onDrop={handleAlbumUpload} onDragOver={e => e.preventDefault()} onClick={() => document.getElementById("fi-album").click()} style={{ border: "2px dashed rgba(179,102,255,0.2)", borderRadius: 10, padding: "16px 12px", textAlign: "center", cursor: "pointer", background: "rgba(179,102,255,0.02)" }}>
+                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2 }}>Add songs to album</div>
+                <div style={{ fontSize: 9, color: "#7a7a8e" }}>Select multiple files, or drop a .zip · MP3, WAV, M4A, AAC, OGG, FLAC</div>
+                <input id="fi-album" type="file" accept="audio/*,.zip" multiple onChange={handleAlbumUpload} style={{ display: "none" }} />
+              </div>
+              {albumUploading && <div style={{ textAlign: "center", padding: 12, marginTop: 8 }}>
+                <div style={{ width: 30, height: 30, border: "3px solid rgba(179,102,255,0.12)", borderTop: "3px solid #b366ff", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 8px" }} />
+                <div style={{ fontSize: 11, color: "#b366ff", fontFamily: "monospace" }}>{albumUploadProgress}</div>
+              </div>}
+            </div>}
+
+            {/* Song list */}
+            <div style={{ fontSize: 9, fontFamily: "monospace", color: "#555", marginBottom: 8, letterSpacing: 1 }}>TRACKLIST</div>
+            {albumSongs.length === 0 && <div style={{ textAlign: "center", padding: 30, border: "1px dashed rgba(255,255,255,0.06)", borderRadius: 8 }}><div style={{ color: "#555", fontSize: 12 }}>No songs yet — upload audio files above</div></div>}
+            <div style={{ display: "grid", gap: 6 }}>{albumSongs.map((song, idx) => {
+              const isComplete = !isLeader && albumProgress?.completedIds?.includes(song.id);
+              const isEditing = editingSongId === song.id;
+              return <div key={song.id} style={{ ...cs(false), display: "flex", alignItems: "center", gap: 8, overflow: "hidden", opacity: isComplete ? 0.6 : 1 }} onClick={() => { if (isEditing) return; isLeader ? loadReview(song.id) : loadSubmit(song.id); }}>
+                <div style={{ fontSize: 12, fontWeight: 800, color: isComplete ? "#44ff88" : "#555", fontFamily: "monospace", minWidth: 24, textAlign: "center" }}>{isComplete ? "✓" : `${idx + 1}.`}</div>
+                {isEditing ? <input type="text" value={editingSongName} onChange={e => setEditingSongName(e.target.value)} onKeyDown={e => { if (e.key === "Enter") renameSong(song.id, editingSongName); if (e.key === "Escape") { setEditingSongId(null); } }} onClick={e => e.stopPropagation()} autoFocus style={{ flex: 1, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(0,240,255,0.3)", borderRadius: 5, padding: "6px 10px", color: "#e8e8f0", fontSize: 12, outline: "none" }} />
+                : <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{song.name}</div>
+                  <div style={{ fontSize: 9, color: "#7a7a8e", fontFamily: "monospace" }}>{song.duration > 0 ? fmt(song.duration) : "—"}</div>
+                </div>}
+                {isLeader && !isEditing && <button onClick={ev => { ev.stopPropagation(); setEditingSongId(song.id); setEditingSongName(song.name); }} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", color: "#7a7a8e", fontSize: 8, padding: "3px 6px", borderRadius: 3, cursor: "pointer", fontFamily: "monospace", flexShrink: 0 }}>✏️</button>}
+                {isLeader && <button onClick={ev => { ev.stopPropagation(); delSong(song.id); }} style={{ background: "rgba(255,51,102,0.05)", border: "1px solid rgba(255,51,102,0.1)", color: "#ff3366", fontSize: 8, padding: "3px 6px", borderRadius: 4, cursor: "pointer", flexShrink: 0 }}>✕</button>}
+                <div style={{ fontSize: 9, color: "#00f0ff", fontFamily: "monospace", flexShrink: 0 }}>{isLeader ? "Review →" : isComplete ? "Done" : "Cut →"}</div>
+              </div>;
+            })}</div>
+          </>; })()}
         </div>}
 
         {/* LEADER: ANALYZE */}
@@ -518,7 +731,7 @@ export default function App() {
               <button onClick={() => createClip(lastTapTime || (playheadTime || 0), null)} style={{ background: "linear-gradient(135deg,rgba(255,215,0,0.15),rgba(255,215,0,0.05))", border: "1px solid rgba(255,215,0,0.3)", color: "#ffd700", fontSize: 10, fontWeight: 600, padding: "5px 12px", borderRadius: 6, cursor: "pointer", fontFamily: "monospace" }}>+ New Clip</button>
               <div style={{ display: "flex", gap: 3 }}><span style={{ fontSize: 8, fontFamily: "monospace", color: "#555" }}>Default:</span>{[15, 30, 60].map(d => <button key={d} onClick={() => setDefDur(d)} style={{ ...bs(defDur === d), padding: "2px 7px", fontSize: 9 }}>{d}s</button>)}</div>
             </div>
-            <Waveform energy={energy} duration={analysis.duration} clips={clips} highlights={[]} selClip={sel} onSel={setSel} onCreate={createClip} onEdge={dragEdge} onMove={moveClip} zoom={zoom || [0, analysis.duration]} onZoom={setZoom} readonly={false} onPlayFrom={t => { setLastTapTime(t); playFull(t); }} playheadTime={playheadTime} />
+            <Waveform energy={energy} duration={analysis.duration} clips={clips} highlights={viralInfo?.positionPattern ? [{ startTime: analysis.duration * (viralInfo.positionPattern.position_range?.min || 0) / 100, endTime: analysis.duration * (viralInfo.positionPattern.position_range?.max || 100) / 100, color: "rgba(255,215,0,0.06)", label: `🔥 ${viralInfo.genre} viral zone`, lc: "rgba(255,215,0,0.4)" }, { startTime: analysis.duration * viralInfo.positionPattern.avg_start_position_pct / 100 - 2, endTime: analysis.duration * viralInfo.positionPattern.avg_start_position_pct / 100 + 2, color: "rgba(255,215,0,0.15)", label: "", lc: "" }] : []} selClip={sel} onSel={setSel} onCreate={createClip} onEdge={dragEdge} onMove={moveClip} zoom={zoom || [0, analysis.duration]} onZoom={setZoom} readonly={false} onPlayFrom={t => { setLastTapTime(t); playFull(t); }} playheadTime={playheadTime} />
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, marginBottom: 4 }}>
               <button onClick={() => playFull(0)} style={{ width: 32, height: 32, borderRadius: "50%", background: playingFull ? "linear-gradient(135deg,#ff3366,#ff6644)" : "linear-gradient(135deg,#00f0ff,#0088aa)", border: "none", color: "#fff", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{playingFull ? "■" : "▶"}</button>
               <div style={{ flex: 1, height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}><div style={{ width: `${fullProgress * 100}%`, height: "100%", background: "linear-gradient(90deg,#00f0ff,#b366ff)", transition: "width 0.1s linear" }} /></div>

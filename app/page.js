@@ -659,6 +659,31 @@ export default function App() {
     setEditingSongName("");
   };
 
+  // Smart back: go to album if song is in an album, otherwise home
+  const goBack = () => {
+    if (activeSongData?.album_id && activeAlbum) {
+      loadAlbum(activeAlbum);
+    } else if (activeSongData?.album_id) {
+      setActiveAlbum(activeSongData.album_id);
+      loadAlbum(activeSongData.album_id);
+    } else {
+      setPage("home");
+    }
+  };
+
+  // Next/prev song in album
+  const albumSongNav = () => {
+    if (!activeSongData?.album_id || !albumSongs.length) return null;
+    const idx = albumSongs.findIndex(s => s.id === activeSong);
+    if (idx < 0) return null;
+    return { idx, total: albumSongs.length, prev: idx > 0 ? albumSongs[idx - 1] : null, next: idx < albumSongs.length - 1 ? albumSongs[idx + 1] : null };
+  };
+
+  const goToAlbumSong = (songId) => {
+    if (isLeader) loadReview(songId);
+    else loadSubmit(songId);
+  };
+
   const delAlbum = async (id) => {
     await deleteAlbum(id);
     setAlbums(await getAlbums());
@@ -743,12 +768,15 @@ export default function App() {
           {analyzing && <div style={{ textAlign: "center", padding: 30 }}><div style={{ width: 36, height: 36, border: "3px solid rgba(245,166,35,0.12)", borderTop: "3px solid #F5A623", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 12px" }} /><div style={{ fontSize: 12, color: "#9B8B73" }}>Analyzing audio & checking viral database...</div></div>}
           
           {/* Standalone songs list */}
-          {songs.filter(s => !s.album_id).length > 0 && <div style={{ display: "grid", gap: 8 }}>{songs.filter(s => !s.album_id).map(song => <div key={song.id} style={{ ...cs(false), display: "flex", alignItems: "center", gap: 10, overflow: "hidden" }} onClick={() => isLeader ? loadReview(song.id) : loadSubmit(song.id)}>
+          {songs.filter(s => !s.album_id).length > 0 && <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 9, fontFamily: "Fredoka, sans-serif", color: "#9B8B73", marginBottom: 8, letterSpacing: 1 }}>SINGLES</div>
+            <div style={{ display: "grid", gap: 8 }}>{songs.filter(s => !s.album_id).map(song => <div key={song.id} style={{ ...cs(false), display: "flex", alignItems: "center", gap: 10, overflow: "hidden" }} onClick={() => isLeader ? loadReview(song.id) : loadSubmit(song.id)}>
             <div style={{ width: 38, height: 38, borderRadius: 8, background: "linear-gradient(135deg,rgba(245,166,35,0.1),rgba(199,62,62,0.1))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, flexShrink: 0 }}>🎵</div>
             <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 600, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{song.name}</div><div style={{ fontSize: 10, color: "#9B8B73", fontFamily: "Fredoka, sans-serif" }}>{song.duration > 0 ? `${fmt(song.duration)} · ~${song.bpm} BPM` : "pending"}</div></div>
             {isLeader && <button onClick={ev => { ev.stopPropagation(); delSong(song.id); }} style={{ background: "rgba(199,62,62,0.05)", border: "1px solid rgba(199,62,62,0.1)", color: "#C73E3E", fontSize: 8, padding: "3px 7px", borderRadius: 4, cursor: "pointer", fontFamily: "Fredoka, sans-serif", flexShrink: 0 }}>Delete</button>}
             <div style={{ fontSize: 10, color: "#F5A623", fontFamily: "Fredoka, sans-serif", flexShrink: 0, whiteSpace: "nowrap" }}>{isLeader ? "Review →" : "Submit →"}</div>
-          </div>)}</div>}
+          </div>)}</div>
+          </div>}
           
           {albums.length === 0 && songs.length === 0 && !analyzing && <div style={{ textAlign: "center", padding: 40, border: "1px dashed rgba(245,230,200,0.06)", borderRadius: 12 }}><div style={{ fontSize: 28, opacity: 0.3, marginBottom: 8 }}>📂</div><div style={{ color: "#555", fontSize: 12 }}>{isLeader ? "Create an album or upload a song to get started" : "No assignments yet"}</div></div>}
         </div>}
@@ -825,7 +853,7 @@ export default function App() {
 
         {/* LEADER: ANALYZE */}
         {page === "analyze" && isLeader && <div>
-          <button onClick={() => setPage("home")} style={{ ...bs(false), marginBottom: 12, fontSize: 9 }}>← Back</button>
+          <button onClick={goBack} style={{ ...bs(false), marginBottom: 12, fontSize: 9 }}>← Back</button>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "9px 12px", background: "rgba(245,230,200,0.025)", borderRadius: 8, marginBottom: 12 }}>
             <div style={{ fontWeight: 600, fontSize: 11 }}>{activeSongData?.name}</div>
             <div style={{ fontFamily: "Fredoka, sans-serif", fontSize: 9, color: "#9B8B73" }}>{analysis && `${fmt(analysis.duration)} · ~${analysis.bpm} BPM`} · {clips.length} clips</div>
@@ -885,7 +913,14 @@ export default function App() {
 
         {/* LEADER: REVIEW */}
         {page === "review" && isLeader && <div>
-          <button onClick={() => setPage("home")} style={{ ...bs(false), marginBottom: 12, fontSize: 9 }}>← Back</button>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <button onClick={goBack} style={{ ...bs(false), fontSize: 9 }}>← Back</button>
+            {(() => { const nav = albumSongNav(); if (!nav) return null; return <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto" }}>
+              {nav.prev && <button onClick={() => goToAlbumSong(nav.prev.id)} style={{ ...bs(false), fontSize: 9, padding: "4px 10px" }}>← Prev</button>}
+              <span style={{ fontSize: 9, color: "#9B8B73", fontFamily: "Fredoka, sans-serif" }}>{nav.idx + 1}/{nav.total}</span>
+              {nav.next && <button onClick={() => goToAlbumSong(nav.next.id)} style={{ ...bs(true), fontSize: 9, padding: "4px 10px" }}>Next →</button>}
+            </div>; })()}
+          </div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
             <div><h2 style={{ fontSize: 17, fontWeight: 700, marginBottom: 2 }}>Team Review — {activeSongData?.name}</h2><p style={{ color: "#9B8B73", fontSize: 11, margin: 0 }}>{subs.length} submission{subs.length !== 1 ? "s" : ""} · updates live</p></div>
             <button onClick={refreshSubs} style={bs(false)}>↻ Refresh</button>
@@ -926,7 +961,14 @@ export default function App() {
 
         {/* MEMBER: SUBMIT */}
         {page === "submit" && !isLeader && <div>
-          <button onClick={() => setPage("home")} style={{ ...bs(false), marginBottom: 12, fontSize: 9 }}>← Back</button>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <button onClick={goBack} style={{ ...bs(false), fontSize: 9 }}>← Back</button>
+            {(() => { const nav = albumSongNav(); if (!nav) return null; return <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto" }}>
+              {nav.prev && <button onClick={() => goToAlbumSong(nav.prev.id)} style={{ ...bs(false), fontSize: 9, padding: "4px 10px" }}>← Prev</button>}
+              <span style={{ fontSize: 9, color: "#9B8B73", fontFamily: "Fredoka, sans-serif" }}>{nav.idx + 1}/{nav.total}</span>
+              {nav.next && <button onClick={() => goToAlbumSong(nav.next.id)} style={{ ...bs(true), fontSize: 9, padding: "4px 10px" }}>Next →</button>}
+            </div>; })()}
+          </div>
           <h2 style={{ fontSize: 17, fontWeight: 700, marginBottom: 4 }}>{activeSongData?.name}</h2>
           <p style={{ color: "#9B8B73", fontSize: 11, marginBottom: 16 }}>Pick 3-5 clips you think would go viral on TikTok</p>
           {!hasAudio && !audioLoading && <div style={{ marginBottom: 16 }}>

@@ -176,21 +176,19 @@ function Waveform({ energy, duration, clips, highlights, selClip, onSel, onCreat
   useEffect(() => {
     const c = ref.current; if (!c || !energy.length) return;
     const ctx = c.getContext("2d"), w = c.width, h = c.height;
-    ctx.clearRect(0, 0, w, h); ctx.fillStyle = "#0a0a12"; ctx.fillRect(0, 0, w, h);
-    // Full track highlight when no clips
-    if ((!clips || clips.length === 0) && !readonly) { ctx.fillStyle = "rgba(0,240,255,0.06)"; ctx.fillRect(0, 0, w, h); }
+    ctx.clearRect(0, 0, w, h); ctx.fillStyle = "#1e1812"; ctx.fillRect(0, 0, w, h);
+    if ((!clips || clips.length === 0) && !readonly) { ctx.fillStyle = "rgba(245,166,35,0.05)"; ctx.fillRect(0, 0, w, h); }
     const gs = zD < 30 ? 1 : zD < 120 ? 5 : 10;
-    ctx.strokeStyle = "rgba(255,255,255,0.03)"; ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(245,230,200,0.04)"; ctx.lineWidth = 1;
     for (let t = Math.ceil(zS / gs) * gs; t <= zE; t += gs) { const x = t2x(t, w); ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
-    (highlights || []).forEach(hl => { const x1 = Math.max(0, t2x(hl.startTime, w)), x2 = Math.min(w, t2x(hl.endTime, w)); if (x2 < 0 || x1 > w) return; ctx.fillStyle = hl.color || "rgba(255,215,0,0.08)"; ctx.fillRect(x1, 0, x2 - x1, h); if (hl.label && x2 - x1 > 30) { ctx.fillStyle = hl.lc || "rgba(255,215,0,0.5)"; ctx.font = "bold 9px monospace"; ctx.fillText(hl.label, x1 + 4, h - 5); } });
-    (clips || []).forEach((cl, idx) => { const x1 = Math.max(0, t2x(cl.startTime, w)), x2 = Math.min(w, t2x(cl.endTime, w)); if (x2 < 0 || x1 > w) return; const isSel = idx === selClip; ctx.fillStyle = isSel ? "rgba(0,240,255,0.12)" : "rgba(255,255,255,0.025)"; ctx.fillRect(x1, 0, x2 - x1, h); if (!readonly) { ctx.fillStyle = isSel ? "rgba(0,240,255,0.5)" : "rgba(255,255,255,0.12)"; ctx.fillRect(x1, 0, 3, h); ctx.fillRect(x2 - 3, 0, 3, h); } ctx.fillStyle = isSel ? "#00f0ff" : "rgba(255,255,255,0.3)"; ctx.font = "bold 10px monospace"; const lbl = cl.isManual ? "✎" : `#${idx + 1}`; if (x2 - x1 > 30) ctx.fillText(lbl, x1 + 5, 13); });
+    (highlights || []).forEach(hl => { const x1 = Math.max(0, t2x(hl.startTime, w)), x2 = Math.min(w, t2x(hl.endTime, w)); if (x2 < 0 || x1 > w) return; ctx.fillStyle = hl.color || "rgba(245,166,35,0.08)"; ctx.fillRect(x1, 0, x2 - x1, h); if (hl.label && x2 - x1 > 30) { ctx.fillStyle = hl.lc || "rgba(245,166,35,0.5)"; ctx.font = "bold 9px Oswald, sans-serif"; ctx.fillText(hl.label, x1 + 4, h - 5); } });
+    (clips || []).forEach((cl, idx) => { const x1 = Math.max(0, t2x(cl.startTime, w)), x2 = Math.min(w, t2x(cl.endTime, w)); if (x2 < 0 || x1 > w) return; const isSel = idx === selClip; ctx.fillStyle = isSel ? "rgba(245,166,35,0.15)" : "rgba(245,230,200,0.03)"; ctx.fillRect(x1, 0, x2 - x1, h); if (!readonly) { ctx.fillStyle = isSel ? "rgba(245,166,35,0.6)" : "rgba(245,230,200,0.12)"; ctx.fillRect(x1, 0, 3, h); ctx.fillRect(x2 - 3, 0, 3, h); } ctx.fillStyle = isSel ? "#F5A623" : "rgba(245,230,200,0.3)"; ctx.font = "bold 10px Oswald, sans-serif"; const lbl = cl.isManual ? "✎" : `#${idx + 1}`; if (x2 - x1 > 30) ctx.fillText(lbl, x1 + 5, 13); });
     const si = Math.floor((zS / duration) * energy.length), ei = Math.floor((zE / duration) * energy.length);
     ctx.beginPath(); ctx.moveTo(0, h); for (let x = 0; x < w; x++) { const eI = si + Math.floor((x / w) * (ei - si)); ctx.lineTo(x, h - (energy[Math.min(eI, energy.length - 1)] || 0) * h * 0.85); } ctx.lineTo(w, h); ctx.closePath();
-    const g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, "rgba(0,240,255,0.5)"); g.addColorStop(0.5, "rgba(179,102,255,0.2)"); g.addColorStop(1, "rgba(255,51,102,0.02)"); ctx.fillStyle = g; ctx.fill();
-    ctx.fillStyle = "rgba(255,255,255,0.2)"; ctx.font = "9px monospace"; for (let t = Math.ceil(zS / gs) * gs; t <= zE; t += gs) ctx.fillText(fmt(t), t2x(t, w) + 2, h - 3);
-    // Playhead
-    if (playheadTime != null && playheadTime >= zS && playheadTime <= zE) { const px = t2x(playheadTime, w); ctx.strokeStyle = "#ff3366"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, h); ctx.stroke(); ctx.fillStyle = "#ff3366"; ctx.font = "bold 9px monospace"; ctx.fillText(fmt(playheadTime), px + 4, 12); }
-    if (hover !== null && playheadTime == null) { const hx = t2x(hover, w); ctx.strokeStyle = "rgba(255,255,255,0.2)"; ctx.lineWidth = 1; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(hx, 0); ctx.lineTo(hx, h); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = "rgba(255,255,255,0.4)"; ctx.font = "9px monospace"; ctx.fillText(fmt(hover), hx + 3, h - 14); }
+    const g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, "rgba(245,166,35,0.6)"); g.addColorStop(0.5, "rgba(199,62,62,0.25)"); g.addColorStop(1, "rgba(212,148,28,0.03)"); ctx.fillStyle = g; ctx.fill();
+    ctx.fillStyle = "rgba(245,230,200,0.25)"; ctx.font = "9px Oswald, sans-serif"; for (let t = Math.ceil(zS / gs) * gs; t <= zE; t += gs) ctx.fillText(fmt(t), t2x(t, w) + 2, h - 3);
+    if (playheadTime != null && playheadTime >= zS && playheadTime <= zE) { const px = t2x(playheadTime, w); ctx.strokeStyle = "#C73E3E"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, h); ctx.stroke(); ctx.fillStyle = "#C73E3E"; ctx.font = "bold 9px Oswald, sans-serif"; ctx.fillText(fmt(playheadTime), px + 4, 12); }
+    if (hover !== null && playheadTime == null) { const hx = t2x(hover, w); ctx.strokeStyle = "rgba(245,230,200,0.2)"; ctx.lineWidth = 1; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(hx, 0); ctx.lineTo(hx, h); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = "rgba(245,230,200,0.4)"; ctx.font = "9px Oswald, sans-serif"; ctx.fillText(fmt(hover), hx + 3, h - 14); }
   }, [energy, clips, highlights, selClip, duration, zoom, hover, drag, playheadTime]);
   const gx = e => { const r = ref.current.getBoundingClientRect(); const cx = e.touches ? e.touches[0].clientX : e.clientX; return (cx - r.left) * (800 / r.width); };
   const findEdge = cx => { if (readonly) return null; const thresh = 'ontouchstart' in window ? 20 : 10; for (let i = 0; i < (clips || []).length; i++) { const x1 = t2x(clips[i].startTime, 800), x2 = t2x(clips[i].endTime, 800); if (Math.abs(cx - x1) < thresh) return { idx: i, edge: "start" }; if (Math.abs(cx - x2) < thresh) return { idx: i, edge: "end" }; } return null; };
@@ -203,43 +201,43 @@ function Waveform({ energy, duration, clips, highlights, selClip, onSel, onCreat
   const onTouchStart = e => { e.preventDefault(); onDown(e); };
   const onTouchMove = e => { e.preventDefault(); onMv(e); };
   const onTouchEnd = e => { e.preventDefault(); onUp(); };
-  return <canvas ref={ref} width={800} height={120} onMouseDown={onDown} onMouseMove={onMv} onMouseUp={onUp} onMouseLeave={() => { setHover(null); setDrag(null); }} onDoubleClick={onDbl} onWheel={onWhl} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{ width: "100%", height: 120, borderRadius: 10, border: "1px solid rgba(255,255,255,0.06)", cursor: "default", display: "block", touchAction: "none" }} />;
+  return <canvas ref={ref} width={800} height={120} onMouseDown={onDown} onMouseMove={onMv} onMouseUp={onUp} onMouseLeave={() => { setHover(null); setDrag(null); }} onDoubleClick={onDbl} onWheel={onWhl} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{ width: "100%", height: 120, borderRadius: 10, border: "2px solid rgba(245,166,35,0.15)", cursor: "default", display: "block", touchAction: "none" }} />;
 }
 
 /* ═══ UI ═══ */
-function AgreementBar({ count, total }) { const pct = total > 0 ? (count / total) * 100 : 0; const color = pct >= 70 ? "#44ff88" : pct >= 40 ? "#ffd700" : "#ff8844"; return <div style={{ display: "flex", alignItems: "center", gap: 8 }}><div style={{ flex: 1, height: 6, background: "rgba(255,255,255,0.06)", borderRadius: 3, overflow: "hidden" }}><div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: 3 }} /></div><span style={{ fontSize: 11, fontWeight: 700, color, fontFamily: "monospace", minWidth: 40 }}>{count}/{total}</span></div>; }
+function AgreementBar({ count, total }) { const pct = total > 0 ? (count / total) * 100 : 0; const color = pct >= 70 ? "#44cc66" : pct >= 40 ? "#F5A623" : "#C73E3E"; return <div style={{ display: "flex", alignItems: "center", gap: 8 }}><div style={{ flex: 1, height: 6, background: "rgba(245,230,200,0.08)", borderRadius: 3, overflow: "hidden" }}><div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: 3 }} /></div><span style={{ fontSize: 11, fontWeight: 700, color, fontFamily: "Oswald, sans-serif", minWidth: 40 }}>{count}/{total}</span></div>; }
 
 
 function ClipCard({ c, idx, sel, playing, isModified, bs, onSel, onPlay, onExport, onDur, onNote, onAB, onRevert, onDel, editNote, setEditNote, ab, clips }) {
   const isSel = idx === sel;
   return (
-    <div onClick={() => onSel(idx)} style={{ background: isSel ? "rgba(0,240,255,0.035)" : "rgba(255,255,255,0.01)", border: `1px solid ${isSel ? "rgba(0,240,255,0.15)" : "rgba(255,255,255,0.035)"}`, borderRadius: 8, padding: "10px 12px", cursor: "pointer", transition: "all 0.2s" }}>
+    <div onClick={() => onSel(idx)} style={{ background: isSel ? "rgba(245,166,35,0.035)" : "rgba(245,230,200,0.01)", border: `1px solid ${isSel ? "rgba(245,166,35,0.15)" : "rgba(245,230,200,0.035)"}`, borderRadius: 8, padding: "10px 12px", cursor: "pointer", transition: "all 0.2s" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-        <div style={{ fontSize: 14, fontWeight: 800, minWidth: 28, textAlign: "center", color: c.isManual ? "#ffd700" : idx === 0 ? "#00f0ff" : idx === 1 ? "#b366ff" : "#7a7a8e" }}>{c.isManual ? "✎" : `#${idx + 1}`}</div>
+        <div style={{ fontSize: 14, fontWeight: 800, minWidth: 28, textAlign: "center", color: c.isManual ? "#F5A623" : idx === 0 ? "#F5A623" : idx === 1 ? "#C73E3E" : "#9B8B73" }}>{c.isManual ? "✎" : `#${idx + 1}`}</div>
         <div style={{ flex: 1 }}>
           <span style={{ fontSize: 11, fontWeight: 600 }}>{fmt(c.startTime)} → {fmt(c.endTime)}</span>
-          <span style={{ fontSize: 9, color: "#7a7a8e", marginLeft: 5 }}>({c.dur}s)</span>
-          {c.viralBoost && parseFloat(c.viralBoost) > 0.3 && <span style={{ fontSize: 7, color: "#ffd700", marginLeft: 5, fontFamily: "monospace", background: "rgba(255,215,0,0.1)", padding: "0 4px", borderRadius: 2 }}>🔥 VIRAL</span>}
-          {isModified && <span style={{ fontSize: 8, color: "#ff8844", marginLeft: 5, fontFamily: "monospace" }}>● edited</span>}
-          {c.notes && <span style={{ fontSize: 9, color: "#b366ff", marginLeft: 6, fontStyle: "italic" }}>📝 {c.notes}</span>}
+          <span style={{ fontSize: 9, color: "#9B8B73", marginLeft: 5 }}>({c.dur}s)</span>
+          {c.viralBoost && parseFloat(c.viralBoost) > 0.3 && <span style={{ fontSize: 7, color: "#F5A623", marginLeft: 5, fontFamily: "Oswald, sans-serif", background: "rgba(245,166,35,0.1)", padding: "0 4px", borderRadius: 2 }}>🔥 VIRAL</span>}
+          {isModified && <span style={{ fontSize: 8, color: "#D4941C", marginLeft: 5, fontFamily: "Oswald, sans-serif" }}>● edited</span>}
+          {c.notes && <span style={{ fontSize: 9, color: "#C73E3E", marginLeft: 6, fontStyle: "italic" }}>📝 {c.notes}</span>}
         </div>
         <div style={{ display: "flex", gap: 3, alignItems: "center", flexShrink: 0 }}>
           <div style={{ display: "flex", gap: 2 }}>{[15, 30, 60].map(d => <button key={d} onClick={e => { e.stopPropagation(); onDur(idx, d); }} style={{ ...bs(c.dur === d), padding: "2px 5px", fontSize: 8 }}>{d}s</button>)}</div>
-          <button onClick={e => { e.stopPropagation(); onPlay(idx); }} style={{ width: 28, height: 28, borderRadius: "50%", background: playing && isSel ? "linear-gradient(135deg,#ff3366,#ff6644)" : "linear-gradient(135deg,#00f0ff,#0088aa)", border: "none", color: "#fff", fontSize: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{playing && isSel ? "■" : "▶"}</button>
-          <button onClick={e => { e.stopPropagation(); onExport(idx); }} style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", color: "#ccc", fontSize: 9, padding: "3px 8px", borderRadius: 4, cursor: "pointer", fontFamily: "monospace" }}>⬇</button>
+          <button onClick={e => { e.stopPropagation(); onPlay(idx); }} style={{ width: 28, height: 28, borderRadius: "50%", background: playing && isSel ? "linear-gradient(135deg,#C73E3E,#ff6644)" : "linear-gradient(135deg,#F5A623,#0088aa)", border: "none", color: "#fff", fontSize: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{playing && isSel ? "■" : "▶"}</button>
+          <button onClick={e => { e.stopPropagation(); onExport(idx); }} style={{ background: "rgba(245,230,200,0.04)", border: "1px solid rgba(245,230,200,0.07)", color: "#ccc", fontSize: 9, padding: "3px 8px", borderRadius: 4, cursor: "pointer", fontFamily: "Oswald, sans-serif" }}>⬇</button>
         </div>
       </div>
       {isSel && <div style={{ display: "flex", gap: 4, marginTop: 4, paddingLeft: 36, flexWrap: "wrap" }}>
         <button onClick={e => { e.stopPropagation(); setEditNote(editNote === idx ? null : idx); }} style={{ ...bs(editNote === idx), padding: "2px 8px", fontSize: 8 }}>📝 {c.notes ? "Edit" : "Add"} Note</button>
         {clips.length >= 2 && <button onClick={e => { e.stopPropagation(); onAB(idx); }} style={{ ...bs(false), padding: "2px 8px", fontSize: 8 }}>⚡ A/B Compare</button>}
-        {isModified && <button onClick={e => { e.stopPropagation(); onRevert(idx); }} style={{ ...bs(false), padding: "2px 8px", fontSize: 8, color: "#00f0ff" }}>↩ Revert</button>}
-        {c.isManual && <button onClick={e => { e.stopPropagation(); onDel(idx); }} style={{ background: "rgba(255,51,102,0.05)", border: "1px solid rgba(255,51,102,0.1)", color: "#ff3366", padding: "2px 8px", borderRadius: 4, fontSize: 8, cursor: "pointer" }}>🗑 Delete</button>}
+        {isModified && <button onClick={e => { e.stopPropagation(); onRevert(idx); }} style={{ ...bs(false), padding: "2px 8px", fontSize: 8, color: "#F5A623" }}>↩ Revert</button>}
+        {c.isManual && <button onClick={e => { e.stopPropagation(); onDel(idx); }} style={{ background: "rgba(199,62,62,0.05)", border: "1px solid rgba(199,62,62,0.1)", color: "#C73E3E", padding: "2px 8px", borderRadius: 4, fontSize: 8, cursor: "pointer" }}>🗑 Delete</button>}
       </div>}
       {editNote === idx && <div style={{ marginTop: 6, paddingLeft: 36 }} onClick={e => e.stopPropagation()}>
-        <input type="text" value={c.notes || ""} onChange={e => onNote(idx, e.target.value)} placeholder="e.g. 'Best for lip-sync'" autoFocus style={{ width: "100%", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 5, padding: "6px 9px", color: "#e8e8f0", fontSize: 10, outline: "none" }} onKeyDown={e => { if (e.key === "Enter") setEditNote(null); }} />
+        <input type="text" value={c.notes || ""} onChange={e => onNote(idx, e.target.value)} placeholder="e.g. 'Best for lip-sync'" autoFocus style={{ width: "100%", background: "rgba(245,230,200,0.03)", border: "1px solid rgba(245,230,200,0.08)", borderRadius: 5, padding: "6px 9px", color: "#F5E6C8", fontSize: 10, outline: "none" }} onKeyDown={e => { if (e.key === "Enter") setEditNote(null); }} />
       </div>}
       {ab && isSel && <div style={{ marginTop: 5, paddingLeft: 36, display: "flex", gap: 3, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 8, color: "#555", fontFamily: "monospace" }}>Compare vs:</span>
+        <span style={{ fontSize: 8, color: "#555", fontFamily: "Oswald, sans-serif" }}>Compare vs:</span>
         {clips.map((_, i) => i !== idx && <button key={i} onClick={e => { e.stopPropagation(); onAB(idx, i); }} style={{ ...bs(ab?.b === i), padding: "1px 6px", fontSize: 8 }}>#{i + 1}</button>)}
       </div>}
     </div>
@@ -675,24 +673,24 @@ export default function App() {
     }
   }, [page, activeSong]);
 
-  const bs = active => ({ background: active ? "rgba(0,240,255,0.1)" : "rgba(255,255,255,0.03)", border: `1px solid ${active ? "rgba(0,240,255,0.25)" : "rgba(255,255,255,0.07)"}`, color: active ? "#00f0ff" : "#7a7a8e", padding: "5px 12px", borderRadius: 6, fontSize: 11, cursor: "pointer", fontFamily: "monospace", transition: "all 0.2s" });
-  const cs = active => ({ background: active ? "rgba(0,240,255,0.035)" : "rgba(255,255,255,0.012)", border: `1px solid ${active ? "rgba(0,240,255,0.15)" : "rgba(255,255,255,0.04)"}`, borderRadius: 9, padding: "12px 14px", cursor: "pointer", transition: "all 0.2s" });
+  const bs = active => ({ background: active ? "rgba(245,166,35,0.12)" : "rgba(245,230,200,0.04)", border: `1px solid ${active ? "rgba(245,166,35,0.3)" : "rgba(245,230,200,0.08)"}`, color: active ? "#F5A623" : "#9B8B73", padding: "5px 12px", borderRadius: 6, fontSize: 11, cursor: "pointer", fontFamily: "Oswald, sans-serif", transition: "all 0.2s", letterSpacing: "0.5px" });
+  const cs = active => ({ background: active ? "rgba(245,166,35,0.05)" : "rgba(245,230,200,0.015)", border: `1px solid ${active ? "rgba(245,166,35,0.2)" : "rgba(245,230,200,0.05)"}`, borderRadius: 9, padding: "12px 14px", cursor: "pointer", transition: "all 0.2s" });
   const selC = clips[sel];
   const playheadTime = playingFull && analysis?.duration ? fullProgress * analysis.duration : null;
   const startAB = (idx, other) => setAb({ a: idx, b: other !== undefined ? other : (idx === 0 ? 1 : 0) });
 
-  if (!userLoaded) return <div style={{ minHeight: "100vh", background: "#08080d", display: "flex", alignItems: "center", justifyContent: "center", color: "#555" }}>Loading...</div>;
-  if (!user) return <div style={{ minHeight: "100vh", background: "#08080d", color: "#e8e8f0", fontFamily: "'Segoe UI',system-ui,sans-serif", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}><div style={{ maxWidth: 400, width: "100%", padding: "24px 20px", overflow: "hidden" }}><div style={{ textAlign: "center", marginBottom: 32 }}><div style={{ fontSize: 36, marginBottom: 12 }}>🎵</div><h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 6, background: "linear-gradient(135deg,#e8e8f0 30%,#00f0ff 70%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Clip Cutter</h1><p style={{ color: "#7a7a8e", fontSize: 13 }}>Team Collaboration</p></div><SetupForm onSetup={setupUser} /></div></div>;
+  if (!userLoaded) return <div style={{ minHeight: "100vh", background: "#1a1410", display: "flex", alignItems: "center", justifyContent: "center", color: "#9B8B73", fontFamily: "Outfit, sans-serif" }}>Loading...</div>;
+  if (!user) return <div style={{ minHeight: "100vh", background: "#1a1410", color: "#F5E6C8", fontFamily: "Outfit, sans-serif", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}><div style={{ maxWidth: 400, width: "100%", padding: "24px 20px", overflow: "hidden" }}><div style={{ textAlign: "center", marginBottom: 32 }}><div style={{ fontSize: 48, marginBottom: 8 }}>✂️</div><h1 style={{ fontSize: 32, fontWeight: 800, marginBottom: 6, fontFamily: "'Permanent Marker', cursive", color: "#F5A623", letterSpacing: 2, textShadow: "2px 2px 0px rgba(199,62,62,0.4)" }}>CLIP CUTTER</h1><p style={{ color: "#9B8B73", fontSize: 13, fontFamily: "Oswald, sans-serif", letterSpacing: 2, textTransform: "uppercase" }}>Team Collaboration</p></div><SetupForm onSetup={setupUser} /></div></div>;
 
   return (
-    <div style={{ minHeight: "100vh", background: "#08080d", color: "#e8e8f0", fontFamily: "'Segoe UI',system-ui,sans-serif", overflow: "hidden" }}>
+    <div style={{ minHeight: "100vh", background: "#1a1410", color: "#F5E6C8", fontFamily: "Outfit, sans-serif", overflow: "hidden" }}>
       <div style={{ overflowX: "hidden", overflowY: "auto", height: "100vh", WebkitOverflowScrolling: "touch" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderBottom: "1px solid rgba(255,255,255,0.05)", background: "rgba(255,255,255,0.015)", position: "sticky", top: 0, zIndex: 50, flexWrap: "wrap", gap: 6 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontSize: 15 }}>🎵</span><span style={{ fontWeight: 700, fontSize: 13 }}>Clip Cutter</span><span style={{ fontFamily: "monospace", fontSize: 8, color: isLeader ? "#ff3366" : "#00f0ff", letterSpacing: 2, background: isLeader ? "rgba(255,51,102,0.1)" : "rgba(0,240,255,0.1)", padding: "2px 6px", borderRadius: 3 }}>{user.role.toUpperCase()}</span></div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 11, color: "#7a7a8e" }}>{user.name}</span><button onClick={() => setPage("home")} style={bs(page === "home")}>Home</button><button onClick={() => { setUser(null); localStorage.removeItem("cc-user"); setClips([]); setSel(0); setPage("home"); setActiveSong(null); setEnergy([]); setAnalysis(null); setSubmitted(false); setSubs([]); setConsensus([]); stopPlay(); }} style={{ ...bs(false), fontSize: 9, padding: "3px 8px" }}>Logout</button></div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", borderBottom: "2px solid rgba(245,166,35,0.15)", background: "linear-gradient(180deg, #231c14 0%, #1a1410 100%)", position: "sticky", top: 0, zIndex: 50, flexWrap: "wrap", gap: 6 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}><span style={{ fontSize: 20 }}>✂️</span><span style={{ fontWeight: 800, fontSize: 16, fontFamily: "'Permanent Marker', cursive", color: "#F5A623", letterSpacing: 1 }}>CLIP CUTTER</span><span style={{ fontFamily: "Oswald, sans-serif", fontSize: 9, color: isLeader ? "#C73E3E" : "#F5A623", letterSpacing: 2, background: isLeader ? "rgba(199,62,62,0.15)" : "rgba(245,166,35,0.12)", padding: "2px 8px", borderRadius: 3, border: `1px solid ${isLeader ? "rgba(199,62,62,0.3)" : "rgba(245,166,35,0.25)"}` }}>{user.role.toUpperCase()}</span></div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 11, color: "#9B8B73", fontFamily: "Oswald, sans-serif" }}>{user.name}</span><button onClick={() => setPage("home")} style={bs(page === "home")}>Home</button><button onClick={() => { setUser(null); localStorage.removeItem("cc-user"); setClips([]); setSel(0); setPage("home"); setActiveSong(null); setEnergy([]); setAnalysis(null); setSubmitted(false); setSubs([]); setConsensus([]); stopPlay(); }} style={{ ...bs(false), fontSize: 9, padding: "3px 8px" }}>Logout</button></div>
       </div>
-      {notice && <div style={{ position: "fixed", top: 50, left: "50%", transform: "translateX(-50%)", background: "rgba(68,255,136,0.15)", border: "1px solid rgba(68,255,136,0.3)", color: "#44ff88", padding: "8px 20px", borderRadius: 8, fontSize: 12, fontFamily: "monospace", zIndex: 100 }}>{notice}</div>}
-      {audioLoading && <div style={{ position: "fixed", top: 50, left: "50%", transform: "translateX(-50%)", background: "rgba(0,240,255,0.1)", border: "1px solid rgba(0,240,255,0.2)", color: "#00f0ff", padding: "8px 20px", borderRadius: 8, fontSize: 12, fontFamily: "monospace", zIndex: 100 }}>Loading audio...</div>}
+      {notice && <div style={{ position: "fixed", top: 50, left: "50%", transform: "translateX(-50%)", background: "rgba(68,204,102,0.15)", border: "1px solid rgba(68,204,102,0.3)", color: "#44cc66", padding: "8px 20px", borderRadius: 8, fontSize: 12, fontFamily: "Oswald, sans-serif", zIndex: 100 }}>{notice}</div>}
+      {audioLoading && <div style={{ position: "fixed", top: 50, left: "50%", transform: "translateX(-50%)", background: "rgba(245,166,35,0.12)", border: "1px solid rgba(245,166,35,0.25)", color: "#F5A623", padding: "8px 20px", borderRadius: 8, fontSize: 12, fontFamily: "Oswald, sans-serif", zIndex: 100 }}>Loading audio...</div>}
 
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "20px 12px 80px", width: "calc(100% - 0px)", overflowX: "hidden", overflowY: "auto" }}>
 
@@ -702,18 +700,18 @@ export default function App() {
           
           {/* LEADER: Create Album */}
           {isLeader && <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 9, fontFamily: "monospace", color: "#555", marginBottom: 6, letterSpacing: 1 }}>CREATE ALBUM</div>
+            <div style={{ fontSize: 9, fontFamily: "Oswald, sans-serif", color: "#555", marginBottom: 6, letterSpacing: 1 }}>CREATE ALBUM</div>
             <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-              <input type="text" value={newAlbumName} onChange={e => setNewAlbumName(e.target.value)} placeholder="Album name (e.g. Artist X - Untitled)" onKeyDown={e => { if (e.key === "Enter") handleCreateAlbum(); }} style={{ flex: 1, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "10px 12px", color: "#e8e8f0", fontSize: 12, outline: "none" }} />
+              <input type="text" value={newAlbumName} onChange={e => setNewAlbumName(e.target.value)} placeholder="Album name (e.g. Artist X - Untitled)" onKeyDown={e => { if (e.key === "Enter") handleCreateAlbum(); }} style={{ flex: 1, background: "rgba(245,230,200,0.04)", border: "1px solid rgba(245,230,200,0.1)", borderRadius: 8, padding: "10px 12px", color: "#F5E6C8", fontSize: 12, outline: "none" }} />
               <button onClick={handleCreateAlbum} disabled={!newAlbumName.trim()} style={{ ...bs(!!newAlbumName.trim()), padding: "8px 16px", fontSize: 12, fontWeight: 600, opacity: newAlbumName.trim() ? 1 : 0.3 }}>+ Album</button>
             </div>
             <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 8 }}>
               {[["country","🤠"],["hiphop","🎤"],["pop","🎵"],["edm","🎧"],["rnb","🎶"],["rock","🎸"],["indie","🌿"],["latin","💃"]].map(([g, icon]) =>
                 <button key={g} onClick={() => setSelectedGenre(selectedGenre === g ? null : g)} style={{
-                  background: selectedGenre === g ? "rgba(255,215,0,0.12)" : "rgba(255,255,255,0.03)",
-                  border: `1px solid ${selectedGenre === g ? "rgba(255,215,0,0.35)" : "rgba(255,255,255,0.07)"}`,
-                  color: selectedGenre === g ? "#ffd700" : "#7a7a8e",
-                  padding: "4px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", fontFamily: "monospace"
+                  background: selectedGenre === g ? "rgba(245,166,35,0.12)" : "rgba(245,230,200,0.03)",
+                  border: `1px solid ${selectedGenre === g ? "rgba(245,166,35,0.35)" : "rgba(245,230,200,0.07)"}`,
+                  color: selectedGenre === g ? "#F5A623" : "#9B8B73",
+                  padding: "4px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", fontFamily: "Oswald, sans-serif"
                 }}>{icon} {g}</button>
               )}
             </div>
@@ -721,38 +719,38 @@ export default function App() {
 
           {/* ALBUMS LIST */}
           {albums.length > 0 && <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 9, fontFamily: "monospace", color: "#555", marginBottom: 8, letterSpacing: 1 }}>ALBUMS</div>
+            <div style={{ fontSize: 9, fontFamily: "Oswald, sans-serif", color: "#555", marginBottom: 8, letterSpacing: 1 }}>ALBUMS</div>
             <div style={{ display: "grid", gap: 8 }}>{albums.map(album => <div key={album.id} onClick={() => loadAlbum(album.id)} style={{ ...cs(false), display: "flex", alignItems: "center", gap: 10, overflow: "hidden" }}>
-              <div style={{ width: 42, height: 42, borderRadius: 8, background: "linear-gradient(135deg,rgba(179,102,255,0.15),rgba(255,51,102,0.1))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>💿</div>
+              <div style={{ width: 42, height: 42, borderRadius: 8, background: "linear-gradient(135deg,rgba(199,62,62,0.15),rgba(199,62,62,0.1))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>💿</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{album.name}</div>
-                <div style={{ fontSize: 10, color: "#7a7a8e", fontFamily: "monospace" }}>{album.track_count || 0} tracks{album.genre ? ` · ${album.genre}` : ""}</div>
+                <div style={{ fontSize: 10, color: "#9B8B73", fontFamily: "Oswald, sans-serif" }}>{album.track_count || 0} tracks{album.genre ? ` · ${album.genre}` : ""}</div>
               </div>
-              {isLeader && <button onClick={ev => { ev.stopPropagation(); delAlbum(album.id); }} style={{ background: "rgba(255,51,102,0.05)", border: "1px solid rgba(255,51,102,0.1)", color: "#ff3366", fontSize: 8, padding: "3px 7px", borderRadius: 4, cursor: "pointer", fontFamily: "monospace", flexShrink: 0 }}>Delete</button>}
-              <div style={{ fontSize: 10, color: "#b366ff", fontFamily: "monospace", flexShrink: 0 }}>Open →</div>
+              {isLeader && <button onClick={ev => { ev.stopPropagation(); delAlbum(album.id); }} style={{ background: "rgba(199,62,62,0.05)", border: "1px solid rgba(199,62,62,0.1)", color: "#C73E3E", fontSize: 8, padding: "3px 7px", borderRadius: 4, cursor: "pointer", fontFamily: "Oswald, sans-serif", flexShrink: 0 }}>Delete</button>}
+              <div style={{ fontSize: 10, color: "#C73E3E", fontFamily: "Oswald, sans-serif", flexShrink: 0 }}>Open →</div>
             </div>)}</div>
           </div>}
 
           {/* STANDALONE SONGS (not in albums) */}
           {isLeader && <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 9, fontFamily: "monospace", color: "#555", marginBottom: 6, letterSpacing: 1 }}>SINGLE SONGS</div>
-            <div onDrop={handleUpload} onDragOver={e => e.preventDefault()} onClick={() => document.getElementById("fi2").click()} style={{ border: "2px dashed rgba(0,240,255,0.15)", borderRadius: 12, padding: "16px 12px", textAlign: "center", cursor: "pointer", background: "rgba(0,240,255,0.01)", marginBottom: 8 }}>
+            <div style={{ fontSize: 9, fontFamily: "Oswald, sans-serif", color: "#555", marginBottom: 6, letterSpacing: 1 }}>SINGLE SONGS</div>
+            <div onDrop={handleUpload} onDragOver={e => e.preventDefault()} onClick={() => document.getElementById("fi2").click()} style={{ border: "2px dashed rgba(245,166,35,0.15)", borderRadius: 12, padding: "16px 12px", textAlign: "center", cursor: "pointer", background: "rgba(245,166,35,0.01)", marginBottom: 8 }}>
               <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2 }}>Upload single song</div>
-              <div style={{ fontSize: 9, color: "#7a7a8e" }}>Drop file or click · MP3, WAV, M4A, AAC, OGG, FLAC</div>
+              <div style={{ fontSize: 9, color: "#9B8B73" }}>Drop file or click · MP3, WAV, M4A, AAC, OGG, FLAC</div>
               <input id="fi2" type="file" accept="audio/*" onChange={handleUpload} style={{ display: "none" }} />
             </div>
           </div>}
-          {analyzing && <div style={{ textAlign: "center", padding: 30 }}><div style={{ width: 36, height: 36, border: "3px solid rgba(0,240,255,0.12)", borderTop: "3px solid #00f0ff", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 12px" }} /><div style={{ fontSize: 12, color: "#7a7a8e" }}>Analyzing audio & checking viral database...</div></div>}
+          {analyzing && <div style={{ textAlign: "center", padding: 30 }}><div style={{ width: 36, height: 36, border: "3px solid rgba(245,166,35,0.12)", borderTop: "3px solid #F5A623", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 12px" }} /><div style={{ fontSize: 12, color: "#9B8B73" }}>Analyzing audio & checking viral database...</div></div>}
           
           {/* Standalone songs list */}
           {songs.filter(s => !s.album_id).length > 0 && <div style={{ display: "grid", gap: 8 }}>{songs.filter(s => !s.album_id).map(song => <div key={song.id} style={{ ...cs(false), display: "flex", alignItems: "center", gap: 10, overflow: "hidden" }} onClick={() => isLeader ? loadReview(song.id) : loadSubmit(song.id)}>
-            <div style={{ width: 38, height: 38, borderRadius: 8, background: "linear-gradient(135deg,rgba(0,240,255,0.1),rgba(179,102,255,0.1))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, flexShrink: 0 }}>🎵</div>
-            <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 600, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{song.name}</div><div style={{ fontSize: 10, color: "#7a7a8e", fontFamily: "monospace" }}>{song.duration > 0 ? `${fmt(song.duration)} · ~${song.bpm} BPM` : "pending"}</div></div>
-            {isLeader && <button onClick={ev => { ev.stopPropagation(); delSong(song.id); }} style={{ background: "rgba(255,51,102,0.05)", border: "1px solid rgba(255,51,102,0.1)", color: "#ff3366", fontSize: 8, padding: "3px 7px", borderRadius: 4, cursor: "pointer", fontFamily: "monospace", flexShrink: 0 }}>Delete</button>}
-            <div style={{ fontSize: 10, color: "#00f0ff", fontFamily: "monospace", flexShrink: 0, whiteSpace: "nowrap" }}>{isLeader ? "Review →" : "Submit →"}</div>
+            <div style={{ width: 38, height: 38, borderRadius: 8, background: "linear-gradient(135deg,rgba(245,166,35,0.1),rgba(199,62,62,0.1))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, flexShrink: 0 }}>🎵</div>
+            <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 600, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{song.name}</div><div style={{ fontSize: 10, color: "#9B8B73", fontFamily: "Oswald, sans-serif" }}>{song.duration > 0 ? `${fmt(song.duration)} · ~${song.bpm} BPM` : "pending"}</div></div>
+            {isLeader && <button onClick={ev => { ev.stopPropagation(); delSong(song.id); }} style={{ background: "rgba(199,62,62,0.05)", border: "1px solid rgba(199,62,62,0.1)", color: "#C73E3E", fontSize: 8, padding: "3px 7px", borderRadius: 4, cursor: "pointer", fontFamily: "Oswald, sans-serif", flexShrink: 0 }}>Delete</button>}
+            <div style={{ fontSize: 10, color: "#F5A623", fontFamily: "Oswald, sans-serif", flexShrink: 0, whiteSpace: "nowrap" }}>{isLeader ? "Review →" : "Submit →"}</div>
           </div>)}</div>}
           
-          {albums.length === 0 && songs.length === 0 && !analyzing && <div style={{ textAlign: "center", padding: 40, border: "1px dashed rgba(255,255,255,0.06)", borderRadius: 12 }}><div style={{ fontSize: 28, opacity: 0.3, marginBottom: 8 }}>📂</div><div style={{ color: "#555", fontSize: 12 }}>{isLeader ? "Create an album or upload a song to get started" : "No assignments yet"}</div></div>}
+          {albums.length === 0 && songs.length === 0 && !analyzing && <div style={{ textAlign: "center", padding: 40, border: "1px dashed rgba(245,230,200,0.06)", borderRadius: 12 }}><div style={{ fontSize: 28, opacity: 0.3, marginBottom: 8 }}>📂</div><div style={{ color: "#555", fontSize: 12 }}>{isLeader ? "Create an album or upload a song to get started" : "No assignments yet"}</div></div>}
         </div>}
 
         {/* ALBUM VIEW */}
@@ -763,63 +761,63 @@ export default function App() {
               <div style={{ fontSize: 28 }}>💿</div>
               <div style={{ flex: 1 }}>
                 <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>{album.name}</h2>
-                <div style={{ fontSize: 10, color: "#7a7a8e", fontFamily: "monospace" }}>{albumSongs.length} tracks{album.genre ? ` · ${album.genre}` : ""}</div>
+                <div style={{ fontSize: 10, color: "#9B8B73", fontFamily: "Oswald, sans-serif" }}>{albumSongs.length} tracks{album.genre ? ` · ${album.genre}` : ""}</div>
               </div>
             </div>
 
             {/* Member progress bar */}
-            {!isLeader && albumProgress && <div style={{ background: "rgba(0,240,255,0.03)", border: "1px solid rgba(0,240,255,0.1)", borderRadius: 8, padding: "10px 14px", marginBottom: 16 }}>
+            {!isLeader && albumProgress && <div style={{ background: "rgba(245,166,35,0.03)", border: "1px solid rgba(245,166,35,0.1)", borderRadius: 8, padding: "10px 14px", marginBottom: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                <span style={{ fontSize: 11, fontWeight: 600, color: "#00f0ff" }}>Your Progress</span>
-                <span style={{ fontSize: 12, fontWeight: 800, color: albumProgress.completed === albumProgress.total ? "#44ff88" : "#00f0ff", fontFamily: "monospace" }}>{albumProgress.completed}/{albumProgress.total}</span>
+                <span style={{ fontSize: 11, fontWeight: 600, color: "#F5A623" }}>Your Progress</span>
+                <span style={{ fontSize: 12, fontWeight: 800, color: albumProgress.completed === albumProgress.total ? "#44cc66" : "#F5A623", fontFamily: "Oswald, sans-serif" }}>{albumProgress.completed}/{albumProgress.total}</span>
               </div>
-              <div style={{ height: 6, background: "rgba(255,255,255,0.06)", borderRadius: 3, overflow: "hidden" }}>
-                <div style={{ width: `${albumProgress.total > 0 ? (albumProgress.completed / albumProgress.total) * 100 : 0}%`, height: "100%", background: albumProgress.completed === albumProgress.total ? "linear-gradient(90deg,#44ff88,#00cc66)" : "linear-gradient(90deg,#00f0ff,#b366ff)", borderRadius: 3, transition: "width 0.3s" }} />
+              <div style={{ height: 6, background: "rgba(245,230,200,0.06)", borderRadius: 3, overflow: "hidden" }}>
+                <div style={{ width: `${albumProgress.total > 0 ? (albumProgress.completed / albumProgress.total) * 100 : 0}%`, height: "100%", background: albumProgress.completed === albumProgress.total ? "linear-gradient(90deg,#44cc66,#00cc66)" : "linear-gradient(90deg,#F5A623,#C73E3E)", borderRadius: 3, transition: "width 0.3s" }} />
               </div>
-              {albumProgress.completed === albumProgress.total && albumProgress.total > 0 && <div style={{ fontSize: 10, color: "#44ff88", marginTop: 4, textAlign: "center", fontWeight: 600 }}>✓ All songs completed!</div>}
+              {albumProgress.completed === albumProgress.total && albumProgress.total > 0 && <div style={{ fontSize: 10, color: "#44cc66", marginTop: 4, textAlign: "center", fontWeight: 600 }}>✓ All songs completed!</div>}
             </div>}
 
             {/* Leader: team progress */}
-            {isLeader && Object.keys(albumTeamProgress).length > 0 && <div style={{ background: "rgba(179,102,255,0.03)", border: "1px solid rgba(179,102,255,0.1)", borderRadius: 8, padding: "10px 14px", marginBottom: 16 }}>
-              <div style={{ fontSize: 9, fontFamily: "monospace", color: "#b366ff", letterSpacing: 1, marginBottom: 6 }}>TEAM PROGRESS</div>
+            {isLeader && Object.keys(albumTeamProgress).length > 0 && <div style={{ background: "rgba(199,62,62,0.03)", border: "1px solid rgba(199,62,62,0.1)", borderRadius: 8, padding: "10px 14px", marginBottom: 16 }}>
+              <div style={{ fontSize: 9, fontFamily: "Oswald, sans-serif", color: "#C73E3E", letterSpacing: 1, marginBottom: 6 }}>TEAM PROGRESS</div>
               {Object.entries(albumTeamProgress).map(([name, p]) => <div key={name} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
                 <span style={{ fontSize: 11, color: "#ccc", minWidth: 60 }}>{name}</span>
-                <div style={{ flex: 1, height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}>
-                  <div style={{ width: `${p.total > 0 ? (p.completed / p.total) * 100 : 0}%`, height: "100%", background: p.completed === p.total ? "#44ff88" : "#b366ff", borderRadius: 2 }} />
+                <div style={{ flex: 1, height: 4, background: "rgba(245,230,200,0.06)", borderRadius: 2, overflow: "hidden" }}>
+                  <div style={{ width: `${p.total > 0 ? (p.completed / p.total) * 100 : 0}%`, height: "100%", background: p.completed === p.total ? "#44cc66" : "#C73E3E", borderRadius: 2 }} />
                 </div>
-                <span style={{ fontSize: 10, fontFamily: "monospace", color: p.completed === p.total ? "#44ff88" : "#aaa" }}>{p.completed}/{p.total}</span>
+                <span style={{ fontSize: 10, fontFamily: "Oswald, sans-serif", color: p.completed === p.total ? "#44cc66" : "#aaa" }}>{p.completed}/{p.total}</span>
               </div>)}
             </div>}
 
             {/* Leader: add songs to album */}
             {isLeader && <div style={{ marginBottom: 16 }}>
-              <div onDrop={handleAlbumUpload} onDragOver={e => e.preventDefault()} onClick={() => document.getElementById("fi-album").click()} style={{ border: "2px dashed rgba(179,102,255,0.2)", borderRadius: 10, padding: "16px 12px", textAlign: "center", cursor: "pointer", background: "rgba(179,102,255,0.02)" }}>
+              <div onDrop={handleAlbumUpload} onDragOver={e => e.preventDefault()} onClick={() => document.getElementById("fi-album").click()} style={{ border: "2px dashed rgba(199,62,62,0.2)", borderRadius: 10, padding: "16px 12px", textAlign: "center", cursor: "pointer", background: "rgba(199,62,62,0.02)" }}>
                 <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2 }}>Add songs to album</div>
-                <div style={{ fontSize: 9, color: "#7a7a8e" }}>Select multiple files, or drop a .zip · MP3, WAV, M4A, AAC, OGG, FLAC</div>
+                <div style={{ fontSize: 9, color: "#9B8B73" }}>Select multiple files, or drop a .zip · MP3, WAV, M4A, AAC, OGG, FLAC</div>
                 <input id="fi-album" type="file" accept="audio/*,.zip" multiple onChange={handleAlbumUpload} style={{ display: "none" }} />
               </div>
               {albumUploading && <div style={{ textAlign: "center", padding: 12, marginTop: 8 }}>
-                <div style={{ width: 30, height: 30, border: "3px solid rgba(179,102,255,0.12)", borderTop: "3px solid #b366ff", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 8px" }} />
-                <div style={{ fontSize: 11, color: "#b366ff", fontFamily: "monospace" }}>{albumUploadProgress}</div>
+                <div style={{ width: 30, height: 30, border: "3px solid rgba(199,62,62,0.12)", borderTop: "3px solid #C73E3E", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 8px" }} />
+                <div style={{ fontSize: 11, color: "#C73E3E", fontFamily: "Oswald, sans-serif" }}>{albumUploadProgress}</div>
               </div>}
             </div>}
 
             {/* Song list */}
-            <div style={{ fontSize: 9, fontFamily: "monospace", color: "#555", marginBottom: 8, letterSpacing: 1 }}>TRACKLIST</div>
-            {albumSongs.length === 0 && <div style={{ textAlign: "center", padding: 30, border: "1px dashed rgba(255,255,255,0.06)", borderRadius: 8 }}><div style={{ color: "#555", fontSize: 12 }}>No songs yet — upload audio files above</div></div>}
+            <div style={{ fontSize: 9, fontFamily: "Oswald, sans-serif", color: "#555", marginBottom: 8, letterSpacing: 1 }}>TRACKLIST</div>
+            {albumSongs.length === 0 && <div style={{ textAlign: "center", padding: 30, border: "1px dashed rgba(245,230,200,0.06)", borderRadius: 8 }}><div style={{ color: "#555", fontSize: 12 }}>No songs yet — upload audio files above</div></div>}
             <div style={{ display: "grid", gap: 6 }}>{albumSongs.map((song, idx) => {
               const isComplete = !isLeader && albumProgress?.completedIds?.includes(song.id);
               const isEditing = editingSongId === song.id;
               return <div key={song.id} style={{ ...cs(false), display: "flex", alignItems: "center", gap: 8, overflow: "hidden", opacity: isComplete ? 0.6 : 1 }} onClick={() => { if (isEditing) return; isLeader ? loadReview(song.id) : loadSubmit(song.id); }}>
-                <div style={{ fontSize: 12, fontWeight: 800, color: isComplete ? "#44ff88" : "#555", fontFamily: "monospace", minWidth: 24, textAlign: "center" }}>{isComplete ? "✓" : `${idx + 1}.`}</div>
-                {isEditing ? <input type="text" value={editingSongName} onChange={e => setEditingSongName(e.target.value)} onKeyDown={e => { if (e.key === "Enter") renameSong(song.id, editingSongName); if (e.key === "Escape") { setEditingSongId(null); } }} onClick={e => e.stopPropagation()} autoFocus style={{ flex: 1, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(0,240,255,0.3)", borderRadius: 5, padding: "6px 10px", color: "#e8e8f0", fontSize: 12, outline: "none" }} />
+                <div style={{ fontSize: 12, fontWeight: 800, color: isComplete ? "#44cc66" : "#555", fontFamily: "Oswald, sans-serif", minWidth: 24, textAlign: "center" }}>{isComplete ? "✓" : `${idx + 1}.`}</div>
+                {isEditing ? <input type="text" value={editingSongName} onChange={e => setEditingSongName(e.target.value)} onKeyDown={e => { if (e.key === "Enter") renameSong(song.id, editingSongName); if (e.key === "Escape") { setEditingSongId(null); } }} onClick={e => e.stopPropagation()} autoFocus style={{ flex: 1, background: "rgba(245,230,200,0.06)", border: "1px solid rgba(245,166,35,0.3)", borderRadius: 5, padding: "6px 10px", color: "#F5E6C8", fontSize: 12, outline: "none" }} />
                 : <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{song.name}</div>
-                  <div style={{ fontSize: 9, color: "#7a7a8e", fontFamily: "monospace" }}>{song.duration > 0 ? fmt(song.duration) : "—"}</div>
+                  <div style={{ fontSize: 9, color: "#9B8B73", fontFamily: "Oswald, sans-serif" }}>{song.duration > 0 ? fmt(song.duration) : "—"}</div>
                 </div>}
-                {isLeader && !isEditing && <button onClick={ev => { ev.stopPropagation(); setEditingSongId(song.id); setEditingSongName(song.name); }} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", color: "#7a7a8e", fontSize: 8, padding: "3px 6px", borderRadius: 3, cursor: "pointer", fontFamily: "monospace", flexShrink: 0 }}>✏️</button>}
-                {isLeader && <button onClick={ev => { ev.stopPropagation(); delSong(song.id); }} style={{ background: "rgba(255,51,102,0.05)", border: "1px solid rgba(255,51,102,0.1)", color: "#ff3366", fontSize: 8, padding: "3px 6px", borderRadius: 4, cursor: "pointer", flexShrink: 0 }}>✕</button>}
-                <div style={{ fontSize: 9, color: "#00f0ff", fontFamily: "monospace", flexShrink: 0 }}>{isLeader ? "Review →" : isComplete ? "Done" : "Cut →"}</div>
+                {isLeader && !isEditing && <button onClick={ev => { ev.stopPropagation(); setEditingSongId(song.id); setEditingSongName(song.name); }} style={{ background: "rgba(245,230,200,0.03)", border: "1px solid rgba(245,230,200,0.07)", color: "#9B8B73", fontSize: 8, padding: "3px 6px", borderRadius: 3, cursor: "pointer", fontFamily: "Oswald, sans-serif", flexShrink: 0 }}>✏️</button>}
+                {isLeader && <button onClick={ev => { ev.stopPropagation(); delSong(song.id); }} style={{ background: "rgba(199,62,62,0.05)", border: "1px solid rgba(199,62,62,0.1)", color: "#C73E3E", fontSize: 8, padding: "3px 6px", borderRadius: 4, cursor: "pointer", flexShrink: 0 }}>✕</button>}
+                <div style={{ fontSize: 9, color: "#F5A623", fontFamily: "Oswald, sans-serif", flexShrink: 0 }}>{isLeader ? "Review →" : isComplete ? "Done" : "Cut →"}</div>
               </div>;
             })}</div>
           </>; })()}
@@ -828,60 +826,60 @@ export default function App() {
         {/* LEADER: ANALYZE */}
         {page === "analyze" && isLeader && <div>
           <button onClick={() => setPage("home")} style={{ ...bs(false), marginBottom: 12, fontSize: 9 }}>← Back</button>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "9px 12px", background: "rgba(255,255,255,0.025)", borderRadius: 8, marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "9px 12px", background: "rgba(245,230,200,0.025)", borderRadius: 8, marginBottom: 12 }}>
             <div style={{ fontWeight: 600, fontSize: 11 }}>{activeSongData?.name}</div>
-            <div style={{ fontFamily: "monospace", fontSize: 9, color: "#7a7a8e" }}>{analysis && `${fmt(analysis.duration)} · ~${analysis.bpm} BPM`} · {clips.length} clips</div>
+            <div style={{ fontFamily: "Oswald, sans-serif", fontSize: 9, color: "#9B8B73" }}>{analysis && `${fmt(analysis.duration)} · ~${analysis.bpm} BPM`} · {clips.length} clips</div>
             <div style={{ marginLeft: "auto" }}><button onClick={() => loadReview(activeSong)} style={bs(true)}>Team Review →</button></div>
           </div>
-          <div style={{ background: "rgba(0,240,255,0.02)", border: "1px solid rgba(0,240,255,0.06)", borderRadius: 7, padding: "7px 11px", marginBottom: 12, fontSize: 10, color: "#00f0ff" }}>🔒 AI analysis is private — your team won't see these</div>
-          {viralInfo && viralInfo.matches && viralInfo.matches.length > 0 && <div style={{ background: "linear-gradient(135deg,rgba(255,215,0,0.06),rgba(255,136,68,0.04))", border: "1px solid rgba(255,215,0,0.2)", borderRadius: 8, padding: "10px 14px", marginBottom: 12 }}>
+          <div style={{ background: "rgba(245,166,35,0.02)", border: "1px solid rgba(245,166,35,0.06)", borderRadius: 7, padding: "7px 11px", marginBottom: 12, fontSize: 10, color: "#F5A623" }}>🔒 AI analysis is private — your team won't see these</div>
+          {viralInfo && viralInfo.matches && viralInfo.matches.length > 0 && <div style={{ background: "linear-gradient(135deg,rgba(245,166,35,0.06),rgba(212,148,28,0.04))", border: "1px solid rgba(245,166,35,0.2)", borderRadius: 8, padding: "10px 14px", marginBottom: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
               <span style={{ fontSize: 14 }}>🔥</span>
-              <span style={{ fontSize: 11, fontWeight: 700, color: "#ffd700" }}>Viral Intelligence</span>
-              <span style={{ fontSize: 8, fontFamily: "monospace", color: "#ff8844", background: "rgba(255,136,68,0.1)", padding: "1px 6px", borderRadius: 3 }}>{viralInfo.matchType === 'exact' ? 'MATCH' : 'SIMILAR'}</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "#F5A623" }}>Viral Intelligence</span>
+              <span style={{ fontSize: 8, fontFamily: "Oswald, sans-serif", color: "#D4941C", background: "rgba(212,148,28,0.1)", padding: "1px 6px", borderRadius: 3 }}>{viralInfo.matchType === 'exact' ? 'MATCH' : 'SIMILAR'}</span>
             </div>
             <div style={{ fontSize: 10, color: "#ccc", marginBottom: 4 }}>
-              Found <strong style={{ color: "#ffd700" }}>{viralInfo.matches.length}</strong> trending TikTok sound{viralInfo.matches.length > 1 ? 's' : ''} matching this song
+              Found <strong style={{ color: "#F5A623" }}>{viralInfo.matches.length}</strong> trending TikTok sound{viralInfo.matches.length > 1 ? 's' : ''} matching this song
             </div>
-            {viralInfo.topMatch && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", fontSize: 9, fontFamily: "monospace", color: "#aaa" }}>
+            {viralInfo.topMatch && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", fontSize: 9, fontFamily: "Oswald, sans-serif", color: "#aaa" }}>
               <span>🎵 "{viralInfo.topMatch.title}" by {viralInfo.topMatch.artist}</span>
-              {viralInfo.topMatch.usage_count > 0 && <span style={{ color: "#ff8844" }}>📊 {viralInfo.topMatch.usage_count.toLocaleString()} TikToks</span>}
+              {viralInfo.topMatch.usage_count > 0 && <span style={{ color: "#D4941C" }}>📊 {viralInfo.topMatch.usage_count.toLocaleString()} TikToks</span>}
               {viralInfo.topMatch.sound_duration > 0 && <span>⏱ {Math.round(viralInfo.topMatch.sound_duration)}s clip</span>}
-              {viralInfo.topMatch.sub_genre && <span style={{ color: "#b366ff" }}>🏷 {viralInfo.topMatch.sub_genre}</span>}
+              {viralInfo.topMatch.sub_genre && <span style={{ color: "#C73E3E" }}>🏷 {viralInfo.topMatch.sub_genre}</span>}
             </div>}
           </div>}
-          {viralInfo?.positionPattern && <div style={{ background: "linear-gradient(135deg,rgba(0,240,255,0.04),rgba(179,102,255,0.03))", border: "1px solid rgba(0,240,255,0.15)", borderRadius: 8, padding: "10px 14px", marginBottom: 12 }}>
+          {viralInfo?.positionPattern && <div style={{ background: "linear-gradient(135deg,rgba(245,166,35,0.04),rgba(199,62,62,0.03))", border: "1px solid rgba(245,166,35,0.15)", borderRadius: 8, padding: "10px 14px", marginBottom: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
               <span style={{ fontSize: 14 }}>🧠</span>
-              <span style={{ fontSize: 11, fontWeight: 700, color: "#00f0ff" }}>Learned Pattern: {viralInfo.genre}</span>
-              <span style={{ fontSize: 8, fontFamily: "monospace", color: "#44ff88", background: "rgba(68,255,136,0.1)", padding: "1px 6px", borderRadius: 3 }}>{viralInfo.positionPattern.sample_size} SONGS ANALYZED</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "#F5A623" }}>Learned Pattern: {viralInfo.genre}</span>
+              <span style={{ fontSize: 8, fontFamily: "Oswald, sans-serif", color: "#44cc66", background: "rgba(68,204,102,0.1)", padding: "1px 6px", borderRadius: 3 }}>{viralInfo.positionPattern.sample_size} SONGS ANALYZED</span>
             </div>
             <div style={{ fontSize: 10, color: "#ccc", marginBottom: 4 }}>
-              Viral {viralInfo.genre} clips start avg <strong style={{ color: "#00f0ff" }}>{viralInfo.positionPattern.avg_start_position_pct}%</strong> through the song
-              <span style={{ color: "#7a7a8e" }}> (range: {viralInfo.positionPattern.position_range?.min}–{viralInfo.positionPattern.position_range?.max}%)</span>
+              Viral {viralInfo.genre} clips start avg <strong style={{ color: "#F5A623" }}>{viralInfo.positionPattern.avg_start_position_pct}%</strong> through the song
+              <span style={{ color: "#9B8B73" }}> (range: {viralInfo.positionPattern.position_range?.min}–{viralInfo.positionPattern.position_range?.max}%)</span>
             </div>
             <div style={{ fontSize: 9, color: "#999" }}>
               💡 AI clip scoring boosted for positions matching this pattern
             </div>
           </div>}
-          {viralInfo && !viralInfo.positionPattern && (!viralInfo.matches || viralInfo.matches.length === 0) && <div style={{ background: "rgba(255,255,255,0.015)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 7, padding: "7px 11px", marginBottom: 12, fontSize: 9, color: "#7a7a8e" }}>
+          {viralInfo && !viralInfo.positionPattern && (!viralInfo.matches || viralInfo.matches.length === 0) && <div style={{ background: "rgba(245,230,200,0.015)", border: "1px solid rgba(245,230,200,0.04)", borderRadius: 7, padding: "7px 11px", marginBottom: 12, fontSize: 9, color: "#9B8B73" }}>
             🔍 No genre selected — using waveform analysis only. Go back and select a genre for smarter AI suggestions.
           </div>}
           {hasAudio && <div style={{ marginBottom: 16 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5, flexWrap: "wrap", gap: 6 }}>
-              <button onClick={() => createClip(lastTapTime || (playheadTime || 0), null)} style={{ background: "linear-gradient(135deg,rgba(255,215,0,0.15),rgba(255,215,0,0.05))", border: "1px solid rgba(255,215,0,0.3)", color: "#ffd700", fontSize: 10, fontWeight: 600, padding: "5px 12px", borderRadius: 6, cursor: "pointer", fontFamily: "monospace" }}>+ New Clip</button>
-              <div style={{ display: "flex", gap: 3 }}><span style={{ fontSize: 8, fontFamily: "monospace", color: "#555" }}>Default:</span>{[15, 30, 60].map(d => <button key={d} onClick={() => setDefDur(d)} style={{ ...bs(defDur === d), padding: "2px 7px", fontSize: 9 }}>{d}s</button>)}</div>
+              <button onClick={() => createClip(lastTapTime || (playheadTime || 0), null)} style={{ background: "linear-gradient(135deg,rgba(245,166,35,0.15),rgba(245,166,35,0.05))", border: "1px solid rgba(245,166,35,0.3)", color: "#F5A623", fontSize: 10, fontWeight: 600, padding: "5px 12px", borderRadius: 6, cursor: "pointer", fontFamily: "Oswald, sans-serif" }}>+ New Clip</button>
+              <div style={{ display: "flex", gap: 3 }}><span style={{ fontSize: 8, fontFamily: "Oswald, sans-serif", color: "#555" }}>Default:</span>{[15, 30, 60].map(d => <button key={d} onClick={() => setDefDur(d)} style={{ ...bs(defDur === d), padding: "2px 7px", fontSize: 9 }}>{d}s</button>)}</div>
             </div>
-            <Waveform energy={energy} duration={analysis.duration} clips={clips} highlights={viralInfo?.positionPattern ? [{ startTime: analysis.duration * (viralInfo.positionPattern.position_range?.min || 0) / 100, endTime: analysis.duration * (viralInfo.positionPattern.position_range?.max || 100) / 100, color: "rgba(255,215,0,0.06)", label: `🔥 ${viralInfo.genre} viral zone`, lc: "rgba(255,215,0,0.4)" }, { startTime: analysis.duration * viralInfo.positionPattern.avg_start_position_pct / 100 - 2, endTime: analysis.duration * viralInfo.positionPattern.avg_start_position_pct / 100 + 2, color: "rgba(255,215,0,0.15)", label: "", lc: "" }] : []} selClip={sel} onSel={setSel} onCreate={createClip} onEdge={dragEdge} onMove={moveClip} zoom={zoom || [0, analysis.duration]} onZoom={setZoom} readonly={false} onPlayFrom={t => { setLastTapTime(t); playFull(t); }} playheadTime={playheadTime} />
+            <Waveform energy={energy} duration={analysis.duration} clips={clips} highlights={viralInfo?.positionPattern ? [{ startTime: analysis.duration * (viralInfo.positionPattern.position_range?.min || 0) / 100, endTime: analysis.duration * (viralInfo.positionPattern.position_range?.max || 100) / 100, color: "rgba(245,166,35,0.06)", label: `🔥 ${viralInfo.genre} viral zone`, lc: "rgba(245,166,35,0.4)" }, { startTime: analysis.duration * viralInfo.positionPattern.avg_start_position_pct / 100 - 2, endTime: analysis.duration * viralInfo.positionPattern.avg_start_position_pct / 100 + 2, color: "rgba(245,166,35,0.15)", label: "", lc: "" }] : []} selClip={sel} onSel={setSel} onCreate={createClip} onEdge={dragEdge} onMove={moveClip} zoom={zoom || [0, analysis.duration]} onZoom={setZoom} readonly={false} onPlayFrom={t => { setLastTapTime(t); playFull(t); }} playheadTime={playheadTime} />
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, marginBottom: 4 }}>
-              <button onClick={() => playFull(0)} style={{ width: 32, height: 32, borderRadius: "50%", background: playingFull ? "linear-gradient(135deg,#ff3366,#ff6644)" : "linear-gradient(135deg,#00f0ff,#0088aa)", border: "none", color: "#fff", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{playingFull ? "■" : "▶"}</button>
-              <div style={{ flex: 1, height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}><div style={{ width: `${fullProgress * 100}%`, height: "100%", background: "linear-gradient(90deg,#00f0ff,#b366ff)", transition: "width 0.1s linear" }} /></div>
-              <span style={{ fontSize: 10, fontFamily: "monospace", color: "#7a7a8e" }}>{playheadTime != null ? fmt(playheadTime) : "0:00"} / {fmt(analysis.duration)}</span>
+              <button onClick={() => playFull(0)} style={{ width: 32, height: 32, borderRadius: "50%", background: playingFull ? "linear-gradient(135deg,#C73E3E,#ff6644)" : "linear-gradient(135deg,#F5A623,#0088aa)", border: "none", color: "#fff", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{playingFull ? "■" : "▶"}</button>
+              <div style={{ flex: 1, height: 3, background: "rgba(245,230,200,0.06)", borderRadius: 2, overflow: "hidden" }}><div style={{ width: `${fullProgress * 100}%`, height: "100%", background: "linear-gradient(90deg,#F5A623,#C73E3E)", transition: "width 0.1s linear" }} /></div>
+              <span style={{ fontSize: 10, fontFamily: "Oswald, sans-serif", color: "#9B8B73" }}>{playheadTime != null ? fmt(playheadTime) : "0:00"} / {fmt(analysis.duration)}</span>
             </div>
             <div style={{ display: "flex", gap: 4, marginTop: 2 }}><button onClick={() => setZoom(null)} style={{ ...bs(!zoom), padding: "2px 8px", fontSize: 8 }}>Full Track</button>{selC && <button onClick={() => setZoom([Math.max(0, selC.startTime - 3), Math.min(analysis.duration, selC.endTime + 3)])} style={{ ...bs(false), padding: "2px 8px", fontSize: 8 }}>Zoom Selected</button>}</div>
           </div>}
-          {ab && <div style={{ background: "rgba(179,102,255,0.05)", border: "1px solid rgba(179,102,255,0.15)", borderRadius: 7, padding: "8px 12px", marginBottom: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}><span style={{ fontSize: 10, color: "#b366ff", fontWeight: 600, fontFamily: "monospace" }}>A/B</span><button onClick={() => playClip(ab.a)} style={{ ...bs(playing && sel === ab.a), padding: "4px 12px" }}>▶ A ({fmt(clips[ab.a]?.startTime)})</button><span style={{ color: "#444", fontSize: 10 }}>vs</span><button onClick={() => playClip(ab.b)} style={{ ...bs(playing && sel === ab.b), padding: "4px 12px" }}>▶ B ({fmt(clips[ab.b]?.startTime)})</button><button onClick={() => { stopPlay(); setAb(null); }} style={{ marginLeft: "auto", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#7a7a8e", fontSize: 9, padding: "3px 8px", borderRadius: 4, cursor: "pointer" }}>✕</button></div>}
-          {clips.length > 0 && <div style={{ display: "flex", gap: 5, marginBottom: 12, alignItems: "center" }}><button onClick={expAll} style={{ background: "linear-gradient(135deg,rgba(0,240,255,0.1),rgba(179,102,255,0.06))", border: "1px solid rgba(0,240,255,0.18)", color: "#00f0ff", fontSize: 10, fontWeight: 600, padding: "7px 14px", borderRadius: 6, cursor: "pointer", fontFamily: "monospace" }}>⬇ Download All {clips.length}</button>{Object.keys(dl).length > 0 && <span style={{ fontSize: 9, color: "#44ff88", fontFamily: "monospace" }}>✓ {Object.keys(dl).length}/{clips.length}</span>}</div>}
+          {ab && <div style={{ background: "rgba(199,62,62,0.05)", border: "1px solid rgba(199,62,62,0.15)", borderRadius: 7, padding: "8px 12px", marginBottom: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}><span style={{ fontSize: 10, color: "#C73E3E", fontWeight: 600, fontFamily: "Oswald, sans-serif" }}>A/B</span><button onClick={() => playClip(ab.a)} style={{ ...bs(playing && sel === ab.a), padding: "4px 12px" }}>▶ A ({fmt(clips[ab.a]?.startTime)})</button><span style={{ color: "#444", fontSize: 10 }}>vs</span><button onClick={() => playClip(ab.b)} style={{ ...bs(playing && sel === ab.b), padding: "4px 12px" }}>▶ B ({fmt(clips[ab.b]?.startTime)})</button><button onClick={() => { stopPlay(); setAb(null); }} style={{ marginLeft: "auto", background: "rgba(245,230,200,0.04)", border: "1px solid rgba(245,230,200,0.08)", color: "#9B8B73", fontSize: 9, padding: "3px 8px", borderRadius: 4, cursor: "pointer" }}>✕</button></div>}
+          {clips.length > 0 && <div style={{ display: "flex", gap: 5, marginBottom: 12, alignItems: "center" }}><button onClick={expAll} style={{ background: "linear-gradient(135deg,rgba(245,166,35,0.1),rgba(199,62,62,0.06))", border: "1px solid rgba(245,166,35,0.18)", color: "#F5A623", fontSize: 10, fontWeight: 600, padding: "7px 14px", borderRadius: 6, cursor: "pointer", fontFamily: "Oswald, sans-serif" }}>⬇ Download All {clips.length}</button>{Object.keys(dl).length > 0 && <span style={{ fontSize: 9, color: "#44cc66", fontFamily: "Oswald, sans-serif" }}>✓ {Object.keys(dl).length}/{clips.length}</span>}</div>}
           <div style={{ display: "grid", gap: 7, marginBottom: 20 }}>{clips.map((c, idx) => <ClipCard key={c.id || idx} c={c} idx={idx} sel={sel} playing={playing} isModified={isModified(c)} bs={bs} onSel={setSel} onPlay={playClip} onExport={expClip} onDur={setClipDur} onNote={updateNote} onAB={startAB} onRevert={revertClip} onDel={delClip} editNote={editNote} setEditNote={setEditNote} ab={ab} clips={clips} />)}</div>
         </div>}
 
@@ -889,40 +887,40 @@ export default function App() {
         {page === "review" && isLeader && <div>
           <button onClick={() => setPage("home")} style={{ ...bs(false), marginBottom: 12, fontSize: 9 }}>← Back</button>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
-            <div><h2 style={{ fontSize: 17, fontWeight: 700, marginBottom: 2 }}>Team Review — {activeSongData?.name}</h2><p style={{ color: "#7a7a8e", fontSize: 11, margin: 0 }}>{subs.length} submission{subs.length !== 1 ? "s" : ""} · updates live</p></div>
+            <div><h2 style={{ fontSize: 17, fontWeight: 700, marginBottom: 2 }}>Team Review — {activeSongData?.name}</h2><p style={{ color: "#9B8B73", fontSize: 11, margin: 0 }}>{subs.length} submission{subs.length !== 1 ? "s" : ""} · updates live</p></div>
             <button onClick={refreshSubs} style={bs(false)}>↻ Refresh</button>
           </div>
           {consensus.length > 0 && <div style={{ marginBottom: 24 }}>
-            <div style={{ fontSize: 10, fontFamily: "monospace", color: "#44ff88", letterSpacing: 2, marginBottom: 8 }}>CONSENSUS CLIPS</div>
-            <div style={{ display: "grid", gap: 8 }}>{consensus.map((c, idx) => <div key={idx} style={{ ...cs(false), borderColor: c.agreement >= 0.7 ? "rgba(68,255,136,0.2)" : c.agreement >= 0.4 ? "rgba(255,215,0,0.15)" : "rgba(255,255,255,0.04)" }}>
+            <div style={{ fontSize: 10, fontFamily: "Oswald, sans-serif", color: "#44cc66", letterSpacing: 2, marginBottom: 8 }}>CONSENSUS CLIPS</div>
+            <div style={{ display: "grid", gap: 8 }}>{consensus.map((c, idx) => <div key={idx} style={{ ...cs(false), borderColor: c.agreement >= 0.7 ? "rgba(68,204,102,0.2)" : c.agreement >= 0.4 ? "rgba(245,166,35,0.15)" : "rgba(245,230,200,0.04)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
-                <div style={{ fontSize: 16, fontWeight: 800, color: c.agreement >= 0.7 ? "#44ff88" : c.agreement >= 0.4 ? "#ffd700" : "#7a7a8e" }}>C{idx + 1}</div>
-                <div style={{ flex: "1 1 150px", minWidth: 0 }}><div style={{ fontSize: 12, fontWeight: 600 }}>{fmt(c.startTime)} → {fmt(c.endTime)} <span style={{ color: "#7a7a8e", fontWeight: 400 }}>({c.dur}s)</span></div><div style={{ fontSize: 10, color: "#7a7a8e", marginTop: 2 }}>Picked by: {c.members.join(", ")}</div></div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: c.agreement >= 0.7 ? "#44cc66" : c.agreement >= 0.4 ? "#F5A623" : "#9B8B73" }}>C{idx + 1}</div>
+                <div style={{ flex: "1 1 150px", minWidth: 0 }}><div style={{ fontSize: 12, fontWeight: 600 }}>{fmt(c.startTime)} → {fmt(c.endTime)} <span style={{ color: "#9B8B73", fontWeight: 400 }}>({c.dur}s)</span></div><div style={{ fontSize: 10, color: "#9B8B73", marginTop: 2 }}>Picked by: {c.members.join(", ")}</div></div>
                 <div style={{ minWidth: 80 }}><AgreementBar count={c.memberCount} total={c.total} /></div>
-                {hasAudio && <button onClick={() => { if (playing && activeRange === `c${idx}`) stopPlay(); else playRange(c.startTime, c.endTime, `c${idx}`); }} style={{ width: 28, height: 28, borderRadius: "50%", background: playing && activeRange === `c${idx}` ? "linear-gradient(135deg,#ff3366,#ff6644)" : "linear-gradient(135deg,#44ff88,#228844)", border: "none", color: "#fff", fontSize: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{playing && activeRange === `c${idx}` ? "■" : "▶"}</button>}
+                {hasAudio && <button onClick={() => { if (playing && activeRange === `c${idx}`) stopPlay(); else playRange(c.startTime, c.endTime, `c${idx}`); }} style={{ width: 28, height: 28, borderRadius: "50%", background: playing && activeRange === `c${idx}` ? "linear-gradient(135deg,#C73E3E,#ff6644)" : "linear-gradient(135deg,#44cc66,#228844)", border: "none", color: "#fff", fontSize: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{playing && activeRange === `c${idx}` ? "■" : "▶"}</button>}
                 {hasAudio && <button onClick={() => expRange(c.startTime, c.endTime, `consensus${idx + 1}`)} style={{ ...bs(false), padding: "3px 8px", fontSize: 9, flexShrink: 0 }}>⬇</button>}
               </div>
               <div style={{ paddingLeft: 26, fontSize: 10, color: "#555" }}>{c.picks.map((p, i) => <span key={i} style={{ marginRight: 10 }}>{p.member}: {fmt(p.startTime)}–{fmt(p.endTime)}</span>)}</div>
             </div>)}</div>
           </div>}
           {hasAudio && <div style={{ marginBottom: 20 }}>
-            <Waveform energy={energy} duration={analysis.duration} clips={clips} highlights={[...consensus.map((c, i) => ({ startTime: c.startTime, endTime: c.endTime, color: c.agreement >= 0.7 ? "rgba(68,255,136,0.1)" : "rgba(255,215,0,0.06)", label: `C${i + 1} (${c.memberCount}/${c.total})`, lc: c.agreement >= 0.7 ? "rgba(68,255,136,0.5)" : "rgba(255,215,0,0.4)" })), ...(showIndiv ? subs.flatMap(s => (s.clips || []).map(c => ({ startTime: c.startTime, endTime: c.endTime, color: "rgba(179,102,255,0.04)", label: "" }))) : [])]} selClip={sel} onSel={setSel} onCreate={createClip} onEdge={dragEdge} onMove={moveClip} zoom={zoom || [0, analysis.duration]} onZoom={setZoom} readonly={false} onPlayFrom={t => { setLastTapTime(t); playFull(t); }} playheadTime={playheadTime} />
+            <Waveform energy={energy} duration={analysis.duration} clips={clips} highlights={[...consensus.map((c, i) => ({ startTime: c.startTime, endTime: c.endTime, color: c.agreement >= 0.7 ? "rgba(68,204,102,0.1)" : "rgba(245,166,35,0.06)", label: `C${i + 1} (${c.memberCount}/${c.total})`, lc: c.agreement >= 0.7 ? "rgba(68,204,102,0.5)" : "rgba(245,166,35,0.4)" })), ...(showIndiv ? subs.flatMap(s => (s.clips || []).map(c => ({ startTime: c.startTime, endTime: c.endTime, color: "rgba(199,62,62,0.04)", label: "" }))) : [])]} selClip={sel} onSel={setSel} onCreate={createClip} onEdge={dragEdge} onMove={moveClip} zoom={zoom || [0, analysis.duration]} onZoom={setZoom} readonly={false} onPlayFrom={t => { setLastTapTime(t); playFull(t); }} playheadTime={playheadTime} />
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, marginBottom: 4 }}>
-              <button onClick={() => playFull(0)} style={{ width: 32, height: 32, borderRadius: "50%", background: playingFull ? "linear-gradient(135deg,#ff3366,#ff6644)" : "linear-gradient(135deg,#00f0ff,#0088aa)", border: "none", color: "#fff", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{playingFull ? "■" : "▶"}</button>
-              <div style={{ flex: 1, height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}><div style={{ width: `${fullProgress * 100}%`, height: "100%", background: "linear-gradient(90deg,#00f0ff,#b366ff)", transition: "width 0.1s linear" }} /></div>
-              <span style={{ fontSize: 10, fontFamily: "monospace", color: "#7a7a8e" }}>{playheadTime != null ? fmt(playheadTime) : "0:00"} / {fmt(analysis.duration)}</span>
+              <button onClick={() => playFull(0)} style={{ width: 32, height: 32, borderRadius: "50%", background: playingFull ? "linear-gradient(135deg,#C73E3E,#ff6644)" : "linear-gradient(135deg,#F5A623,#0088aa)", border: "none", color: "#fff", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{playingFull ? "■" : "▶"}</button>
+              <div style={{ flex: 1, height: 3, background: "rgba(245,230,200,0.06)", borderRadius: 2, overflow: "hidden" }}><div style={{ width: `${fullProgress * 100}%`, height: "100%", background: "linear-gradient(90deg,#F5A623,#C73E3E)", transition: "width 0.1s linear" }} /></div>
+              <span style={{ fontSize: 10, fontFamily: "Oswald, sans-serif", color: "#9B8B73" }}>{playheadTime != null ? fmt(playheadTime) : "0:00"} / {fmt(analysis.duration)}</span>
             </div>
             <div style={{ display: "flex", gap: 4, marginTop: 2 }}><button onClick={() => setZoom(null)} style={{ ...bs(!zoom), padding: "2px 8px", fontSize: 8 }}>Full</button><button onClick={() => setShowIndiv(!showIndiv)} style={{ ...bs(showIndiv), padding: "2px 8px", fontSize: 8 }}>{showIndiv ? "Hide" : "Show"} Individual</button></div>
           </div>}
           {clips.length > 0 && <div style={{ marginBottom: 20 }}>
-            <div style={{ display: "flex", gap: 5, marginBottom: 8, alignItems: "center" }}><div style={{ fontSize: 10, fontFamily: "monospace", color: "#00f0ff", letterSpacing: 2 }}>YOUR CLIPS (AI + CUSTOM)</div>{hasAudio && <div style={{ marginLeft: "auto" }}><button onClick={expAll} style={{ ...bs(true), padding: "4px 12px", fontSize: 9 }}>⬇ Download All</button></div>}</div>
+            <div style={{ display: "flex", gap: 5, marginBottom: 8, alignItems: "center" }}><div style={{ fontSize: 10, fontFamily: "Oswald, sans-serif", color: "#F5A623", letterSpacing: 2 }}>YOUR CLIPS (AI + CUSTOM)</div>{hasAudio && <div style={{ marginLeft: "auto" }}><button onClick={expAll} style={{ ...bs(true), padding: "4px 12px", fontSize: 9 }}>⬇ Download All</button></div>}</div>
             <div style={{ display: "grid", gap: 7 }}>{clips.map((c, idx) => <ClipCard key={c.id || idx} c={c} idx={idx} sel={sel} playing={playing} isModified={isModified(c)} bs={bs} onSel={setSel} onPlay={playClip} onExport={expClip} onDur={setClipDur} onNote={updateNote} onAB={startAB} onRevert={revertClip} onDel={delClip} editNote={editNote} setEditNote={setEditNote} ab={ab} clips={clips} />)}</div>
           </div>}
-          <div style={{ fontSize: 10, fontFamily: "monospace", color: "#b366ff", letterSpacing: 2, marginBottom: 8 }}>INDIVIDUAL SUBMISSIONS</div>
-          {subs.length === 0 && <div style={{ color: "#555", fontSize: 12, padding: 20, textAlign: "center", border: "1px dashed rgba(255,255,255,0.06)", borderRadius: 8 }}>Waiting for team picks...</div>}
+          <div style={{ fontSize: 10, fontFamily: "Oswald, sans-serif", color: "#C73E3E", letterSpacing: 2, marginBottom: 8 }}>INDIVIDUAL SUBMISSIONS</div>
+          {subs.length === 0 && <div style={{ color: "#555", fontSize: 12, padding: 20, textAlign: "center", border: "1px dashed rgba(245,230,200,0.06)", borderRadius: 8 }}>Waiting for team picks...</div>}
           <div style={{ display: "grid", gap: 8 }}>{subs.map((sub, si) => <div key={si} style={{ ...cs(false) }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}><div style={{ width: 28, height: 28, borderRadius: "50%", background: "linear-gradient(135deg,rgba(179,102,255,0.2),rgba(0,240,255,0.1))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#b366ff" }}>{sub.member.charAt(0).toUpperCase()}</div><div style={{ fontWeight: 600, fontSize: 12 }}>{sub.member}</div><div style={{ fontSize: 9, color: "#555", fontFamily: "monospace", marginLeft: "auto" }}>{sub.clips.length} clips</div></div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", paddingLeft: 36 }}>{(sub.clips || []).map((c, ci) => <div key={ci} onClick={() => hasAudio && playRange(c.startTime, c.endTime)} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 6, padding: "4px 10px", fontSize: 10, fontFamily: "monospace", color: "#aaa", cursor: hasAudio ? "pointer" : "default" }}>{hasAudio && <span style={{ marginRight: 4 }}>▶</span>}{fmt(c.startTime)}–{fmt(c.endTime)} ({c.dur}s)</div>)}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}><div style={{ width: 28, height: 28, borderRadius: "50%", background: "linear-gradient(135deg,rgba(199,62,62,0.2),rgba(245,166,35,0.1))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#C73E3E" }}>{sub.member.charAt(0).toUpperCase()}</div><div style={{ fontWeight: 600, fontSize: 12 }}>{sub.member}</div><div style={{ fontSize: 9, color: "#555", fontFamily: "Oswald, sans-serif", marginLeft: "auto" }}>{sub.clips.length} clips</div></div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", paddingLeft: 36 }}>{(sub.clips || []).map((c, ci) => <div key={ci} onClick={() => hasAudio && playRange(c.startTime, c.endTime)} style={{ background: "rgba(245,230,200,0.03)", border: "1px solid rgba(245,230,200,0.06)", borderRadius: 6, padding: "4px 10px", fontSize: 10, fontFamily: "Oswald, sans-serif", color: "#aaa", cursor: hasAudio ? "pointer" : "default" }}>{hasAudio && <span style={{ marginRight: 4 }}>▶</span>}{fmt(c.startTime)}–{fmt(c.endTime)} ({c.dur}s)</div>)}</div>
           </div>)}</div>
         </div>}
 
@@ -930,47 +928,47 @@ export default function App() {
         {page === "submit" && !isLeader && <div>
           <button onClick={() => setPage("home")} style={{ ...bs(false), marginBottom: 12, fontSize: 9 }}>← Back</button>
           <h2 style={{ fontSize: 17, fontWeight: 700, marginBottom: 4 }}>{activeSongData?.name}</h2>
-          <p style={{ color: "#7a7a8e", fontSize: 11, marginBottom: 16 }}>Pick 3-5 clips you think would go viral on TikTok</p>
+          <p style={{ color: "#9B8B73", fontSize: 11, marginBottom: 16 }}>Pick 3-5 clips you think would go viral on TikTok</p>
           {!hasAudio && !audioLoading && <div style={{ marginBottom: 16 }}>
-            {!activeSongData?.audio_path && <div onDrop={e => { e.preventDefault(); loadAudioFromFile(e); }} onDragOver={e => e.preventDefault()} onClick={() => document.getElementById("fi3").click()} style={{ border: "2px dashed rgba(0,240,255,0.15)", borderRadius: 10, padding: "20px 16px", textAlign: "center", cursor: "pointer", background: "rgba(0,240,255,0.01)" }}>
+            {!activeSongData?.audio_path && <div onDrop={e => { e.preventDefault(); loadAudioFromFile(e); }} onDragOver={e => e.preventDefault()} onClick={() => document.getElementById("fi3").click()} style={{ border: "2px dashed rgba(245,166,35,0.15)", borderRadius: 10, padding: "20px 16px", textAlign: "center", cursor: "pointer", background: "rgba(245,166,35,0.01)" }}>
               <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 3 }}>Drop or select the audio file</div>
-              <div style={{ fontSize: 10, color: "#7a7a8e" }}>MP3, WAV, M4A, AAC, OGG, FLAC</div>
+              <div style={{ fontSize: 10, color: "#9B8B73" }}>MP3, WAV, M4A, AAC, OGG, FLAC</div>
               <input id="fi3" type="file" accept="audio/*" onChange={loadAudioFromFile} style={{ display: "none" }} />
             </div>}
           </div>}
-          {audioLoading && <div style={{ textAlign: "center", padding: 30 }}><div style={{ width: 36, height: 36, border: "3px solid rgba(0,240,255,0.12)", borderTop: "3px solid #00f0ff", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 12px" }} /><div style={{ fontSize: 12, color: "#7a7a8e" }}>Loading song...</div></div>}
+          {audioLoading && <div style={{ textAlign: "center", padding: 30 }}><div style={{ width: 36, height: 36, border: "3px solid rgba(245,166,35,0.12)", borderTop: "3px solid #F5A623", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 12px" }} /><div style={{ fontSize: 12, color: "#9B8B73" }}>Loading song...</div></div>}
           {hasAudio && <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5, flexWrap: "wrap", gap: 4 }}>
-              <button onClick={() => createClip(lastTapTime || (playheadTime || 0), null)} style={{ background: "linear-gradient(135deg,rgba(255,215,0,0.15),rgba(255,215,0,0.05))", border: "1px solid rgba(255,215,0,0.3)", color: "#ffd700", fontSize: 11, fontWeight: 600, padding: "6px 14px", borderRadius: 6, cursor: "pointer", fontFamily: "monospace" }}>+ New Clip {lastTapTime > 0 || playheadTime ? `at ${fmt(lastTapTime || playheadTime || 0)}` : ""}</button>
+              <button onClick={() => createClip(lastTapTime || (playheadTime || 0), null)} style={{ background: "linear-gradient(135deg,rgba(245,166,35,0.15),rgba(245,166,35,0.05))", border: "1px solid rgba(245,166,35,0.3)", color: "#F5A623", fontSize: 11, fontWeight: 600, padding: "6px 14px", borderRadius: 6, cursor: "pointer", fontFamily: "Oswald, sans-serif" }}>+ New Clip {lastTapTime > 0 || playheadTime ? `at ${fmt(lastTapTime || playheadTime || 0)}` : ""}</button>
               <div style={{ display: "flex", gap: 2 }}>{[15, 30, 60].map(d => <button key={d} onClick={() => setDefDur(d)} style={{ ...bs(defDur === d), padding: "2px 7px", fontSize: 9 }}>{d}s</button>)}</div>
             </div>
             <Waveform energy={energy} duration={analysis.duration} clips={clips} highlights={[]} selClip={sel} onSel={setSel} onCreate={createClip} onEdge={dragEdge} onMove={moveClip} zoom={zoom || [0, analysis.duration]} onZoom={setZoom} readonly={false} onPlayFrom={t => { setLastTapTime(t); playFull(t); }} playheadTime={playheadTime} />
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, marginBottom: 4 }}>
-              <button onClick={() => playFull(0)} style={{ width: 32, height: 32, borderRadius: "50%", background: playingFull ? "linear-gradient(135deg,#ff3366,#ff6644)" : "linear-gradient(135deg,#00f0ff,#0088aa)", border: "none", color: "#fff", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{playingFull ? "■" : "▶"}</button>
-              <div style={{ flex: 1, height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}><div style={{ width: `${fullProgress * 100}%`, height: "100%", background: "linear-gradient(90deg,#00f0ff,#b366ff)", transition: "width 0.1s linear" }} /></div>
-              <span style={{ fontSize: 10, fontFamily: "monospace", color: "#7a7a8e" }}>{playheadTime != null ? fmt(playheadTime) : "0:00"} / {fmt(analysis.duration)}</span>
+              <button onClick={() => playFull(0)} style={{ width: 32, height: 32, borderRadius: "50%", background: playingFull ? "linear-gradient(135deg,#C73E3E,#ff6644)" : "linear-gradient(135deg,#F5A623,#0088aa)", border: "none", color: "#fff", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{playingFull ? "■" : "▶"}</button>
+              <div style={{ flex: 1, height: 3, background: "rgba(245,230,200,0.06)", borderRadius: 2, overflow: "hidden" }}><div style={{ width: `${fullProgress * 100}%`, height: "100%", background: "linear-gradient(90deg,#F5A623,#C73E3E)", transition: "width 0.1s linear" }} /></div>
+              <span style={{ fontSize: 10, fontFamily: "Oswald, sans-serif", color: "#9B8B73" }}>{playheadTime != null ? fmt(playheadTime) : "0:00"} / {fmt(analysis.duration)}</span>
             </div>
-            <div style={{ fontSize: 9, fontFamily: "monospace", color: "#555", margin: "8px 0 6px", letterSpacing: 1 }}>YOUR PICKS ({clips.length}/5)</div>
-            {clips.length === 0 && <div style={{ textAlign: "center", padding: 20, border: "1px dashed rgba(255,255,255,0.06)", borderRadius: 8, marginBottom: 12 }}><div style={{ fontSize: 10, color: "#7a7a8e" }}>Tap the waveform to set position, then tap "+ New Clip"</div></div>}
+            <div style={{ fontSize: 9, fontFamily: "Oswald, sans-serif", color: "#555", margin: "8px 0 6px", letterSpacing: 1 }}>YOUR PICKS ({clips.length}/5)</div>
+            {clips.length === 0 && <div style={{ textAlign: "center", padding: 20, border: "1px dashed rgba(245,230,200,0.06)", borderRadius: 8, marginBottom: 12 }}><div style={{ fontSize: 10, color: "#9B8B73" }}>Tap the waveform to set position, then tap "+ New Clip"</div></div>}
             <div style={{ display: "grid", gap: 6, marginBottom: 16 }}>{clips.map((c, idx) => <div key={c.id} onClick={() => setSel(idx)} style={{ ...cs(idx === sel) }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#ffd700", minWidth: 20 }}>✎</div>
-                <div style={{ flex: "1 1 120px", fontSize: 11, minWidth: 0 }}>{fmt(c.startTime)} → {fmt(c.endTime)} <span style={{ color: "#7a7a8e" }}>({c.dur}s)</span></div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#F5A623", minWidth: 20 }}>✎</div>
+                <div style={{ flex: "1 1 120px", fontSize: 11, minWidth: 0 }}>{fmt(c.startTime)} → {fmt(c.endTime)} <span style={{ color: "#9B8B73" }}>({c.dur}s)</span></div>
                 <div style={{ display: "flex", gap: 2 }}>{[15, 30, 60].map(d => <button key={d} onClick={e => { e.stopPropagation(); setClipDur(idx, d); }} style={{ ...bs(c.dur === d), padding: "2px 5px", fontSize: 8 }}>{d}s</button>)}</div>
-                <button onClick={e => { e.stopPropagation(); playClip(idx); }} style={{ width: 26, height: 26, borderRadius: "50%", background: playing && sel === idx ? "linear-gradient(135deg,#ff3366,#ff6644)" : "linear-gradient(135deg,#00f0ff,#0088aa)", border: "none", color: "#fff", fontSize: 10, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{playing && sel === idx ? "■" : "▶"}</button>
-                {submitted ? <button onClick={e => { e.stopPropagation(); retractClip(idx); }} style={{ background: "rgba(255,136,68,0.08)", border: "1px solid rgba(255,136,68,0.2)", color: "#ff8844", fontSize: 8, padding: "3px 8px", borderRadius: 4, cursor: "pointer", fontFamily: "monospace" }}>Retract</button> : <button onClick={e => { e.stopPropagation(); delClip(idx); }} style={{ background: "rgba(255,51,102,0.05)", border: "1px solid rgba(255,51,102,0.1)", color: "#ff3366", fontSize: 8, padding: "3px 6px", borderRadius: 4, cursor: "pointer" }}>✕</button>}
+                <button onClick={e => { e.stopPropagation(); playClip(idx); }} style={{ width: 26, height: 26, borderRadius: "50%", background: playing && sel === idx ? "linear-gradient(135deg,#C73E3E,#ff6644)" : "linear-gradient(135deg,#F5A623,#0088aa)", border: "none", color: "#fff", fontSize: 10, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{playing && sel === idx ? "■" : "▶"}</button>
+                {submitted ? <button onClick={e => { e.stopPropagation(); retractClip(idx); }} style={{ background: "rgba(212,148,28,0.08)", border: "1px solid rgba(212,148,28,0.2)", color: "#D4941C", fontSize: 8, padding: "3px 8px", borderRadius: 4, cursor: "pointer", fontFamily: "Oswald, sans-serif" }}>Retract</button> : <button onClick={e => { e.stopPropagation(); delClip(idx); }} style={{ background: "rgba(199,62,62,0.05)", border: "1px solid rgba(199,62,62,0.1)", color: "#C73E3E", fontSize: 8, padding: "3px 6px", borderRadius: 4, cursor: "pointer" }}>✕</button>}
               </div>
-              {idx === sel && <input type="text" placeholder="Add a note..." value={c.notes || ""} onChange={e => { e.stopPropagation(); updateNote(idx, e.target.value); }} onClick={e => e.stopPropagation()} style={{ width: "100%", marginTop: 6, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 4, padding: "5px 8px", color: "#ccc", fontSize: 10, outline: "none", boxSizing: "border-box" }} />}
+              {idx === sel && <input type="text" placeholder="Add a note..." value={c.notes || ""} onChange={e => { e.stopPropagation(); updateNote(idx, e.target.value); }} onClick={e => e.stopPropagation()} style={{ width: "100%", marginTop: 6, background: "rgba(245,230,200,0.03)", border: "1px solid rgba(245,230,200,0.07)", borderRadius: 4, padding: "5px 8px", color: "#ccc", fontSize: 10, outline: "none", boxSizing: "border-box" }} />}
             </div>)}</div>
-            {submitted && <div style={{ background: "rgba(68,255,136,0.08)", border: "1px solid rgba(68,255,136,0.2)", borderRadius: 8, padding: "10px 14px", textAlign: "center", color: "#44ff88", fontSize: 13, fontWeight: 600, marginBottom: 8 }}>✓ Submitted! Retract individual clips above or add more below.</div>}
-            {clips.length < 2 && !submitted && <div style={{ fontSize: 10, color: "#ff8844", fontFamily: "monospace", textAlign: "center", marginBottom: 6 }}>Add at least 2 clips to submit</div>}
+            {submitted && <div style={{ background: "rgba(68,204,102,0.08)", border: "1px solid rgba(68,204,102,0.2)", borderRadius: 8, padding: "10px 14px", textAlign: "center", color: "#44cc66", fontSize: 13, fontWeight: 600, marginBottom: 8 }}>✓ Submitted! Retract individual clips above or add more below.</div>}
+            {clips.length < 2 && !submitted && <div style={{ fontSize: 10, color: "#D4941C", fontFamily: "Oswald, sans-serif", textAlign: "center", marginBottom: 6 }}>Add at least 2 clips to submit</div>}
             <button onClick={submitMyPicks} disabled={clips.length < 2} style={{ ...bs(clips.length >= 2), padding: "10px 24px", fontSize: 13, fontWeight: 600, opacity: clips.length < 2 ? 0.3 : 1, width: "100%", cursor: clips.length < 2 ? "not-allowed" : "pointer" }}>{submitted ? "Update Submission" : `Submit ${clips.length} Pick${clips.length !== 1 ? "s" : ""}`}</button>
           </div>}
         </div>}
       </div>
 
-      {playing && <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, height: 3, zIndex: 100, background: "rgba(0,240,255,0.08)" }}><div style={{ height: "100%", width: `${progress * 100}%`, background: "linear-gradient(90deg,#00f0ff,#b366ff)", transition: "width 0.1s linear" }} /></div>}
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}*{box-sizing:border-box}button:hover{filter:brightness(1.12)}input:focus{border-color:rgba(0,240,255,0.25)!important}html{overflow-x:hidden;width:100%;height:100%}body{margin:0;padding:0;overflow-x:hidden;width:100%;max-width:100%;-webkit-text-size-adjust:100%}canvas{display:block;max-width:100%}input,button{max-width:100%}#__next{overflow-x:hidden;width:100%}`}</style>
+      {playing && <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, height: 3, zIndex: 100, background: "rgba(245,166,35,0.1)" }}><div style={{ height: "100%", width: `${progress * 100}%`, background: "linear-gradient(90deg,#F5A623,#C73E3E)", transition: "width 0.1s linear" }} /></div>}
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}*{box-sizing:border-box}button:hover{filter:brightness(1.15)}input:focus{border-color:rgba(245,166,35,0.3)!important}html{overflow-x:hidden;width:100%;height:100%}body{margin:0;padding:0;overflow-x:hidden;width:100%;max-width:100%;-webkit-text-size-adjust:100%}canvas{display:block;max-width:100%}input,button{max-width:100%}#__next{overflow-x:hidden;width:100%}::selection{background:rgba(245,166,35,0.3);color:#F5E6C8}`}</style>
       </div>
     </div>
   );
@@ -984,21 +982,21 @@ function SetupForm({ onSetup }) {
     onSetup(name, role);
   };
   return <div>
-    <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Your name (e.g. Dylan)" autoFocus style={{ width: "100%", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "12px 14px", color: "#e8e8f0", fontSize: 14, outline: "none", marginBottom: 16 }} />
-    <div style={{ fontSize: 11, color: "#7a7a8e", marginBottom: 8, fontFamily: "monospace" }}>I am a:</div>
+    <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Your name (e.g. Dylan)" autoFocus style={{ width: "100%", background: "rgba(245,230,200,0.05)", border: "1px solid rgba(245,230,200,0.12)", borderRadius: 8, padding: "12px 14px", color: "#F5E6C8", fontSize: 14, outline: "none", marginBottom: 16, fontFamily: "Outfit, sans-serif" }} />
+    <div style={{ fontSize: 12, color: "#9B8B73", marginBottom: 8, fontFamily: "Oswald, sans-serif", letterSpacing: 1, textTransform: "uppercase" }}>I am a:</div>
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
-      {[["leader", "👑", "Team Lead", "#ff3366", "Upload, analyze, review picks"], ["member", "🎧", "Team Member", "#00f0ff", "Listen & submit clip picks"]].map(([r, icon, title, color, desc]) =>
-        <div key={r} onClick={() => { setRole(r); setCodeErr(false); }} style={{ background: role === r ? `rgba(${color === "#ff3366" ? "255,51,102" : "0,240,255"},0.1)` : "rgba(255,255,255,0.02)", border: `2px solid ${role === r ? `rgba(${color === "#ff3366" ? "255,51,102" : "0,240,255"},0.4)` : "rgba(255,255,255,0.06)"}`, borderRadius: 12, padding: 16, cursor: "pointer", textAlign: "center" }}>
+      {[["leader", "👑", "Team Lead", "#C73E3E", "Upload, analyze, review picks"], ["member", "🎧", "Team Member", "#F5A623", "Listen & submit clip picks"]].map(([r, icon, title, color, desc]) =>
+        <div key={r} onClick={() => { setRole(r); setCodeErr(false); }} style={{ background: role === r ? `${color}15` : "rgba(245,230,200,0.02)", border: `2px solid ${role === r ? `${color}66` : "rgba(245,230,200,0.06)"}`, borderRadius: 12, padding: 16, cursor: "pointer", textAlign: "center", transition: "all 0.2s" }}>
           <div style={{ fontSize: 24, marginBottom: 6 }}>{icon}</div>
-          <div style={{ fontWeight: 700, fontSize: 13, color: role === r ? color : "#ccc" }}>{title}</div>
-          <div style={{ fontSize: 10, color: "#7a7a8e", marginTop: 4 }}>{desc}</div>
+          <div style={{ fontWeight: 700, fontSize: 14, color: role === r ? color : "#D4C4A8", fontFamily: "Oswald, sans-serif", letterSpacing: 1 }}>{title}</div>
+          <div style={{ fontSize: 10, color: "#9B8B73", marginTop: 4, fontFamily: "Outfit, sans-serif" }}>{desc}</div>
         </div>
       )}
     </div>
     {role === "leader" && <div style={{ marginBottom: 16 }}>
-      <input type="password" value={code} onChange={e => { setCode(e.target.value); setCodeErr(false); }} placeholder="Enter leader code" style={{ width: "100%", background: "rgba(255,255,255,0.04)", border: `1px solid ${codeErr ? "rgba(255,51,102,0.5)" : "rgba(255,255,255,0.1)"}`, borderRadius: 8, padding: "12px 14px", color: "#e8e8f0", fontSize: 14, outline: "none" }} />
-      {codeErr && <div style={{ fontSize: 10, color: "#ff3366", marginTop: 4, fontFamily: "monospace" }}>Incorrect code</div>}
+      <input type="password" value={code} onChange={e => { setCode(e.target.value); setCodeErr(false); }} placeholder="Enter leader code" style={{ width: "100%", background: "rgba(245,230,200,0.05)", border: `1px solid ${codeErr ? "rgba(199,62,62,0.5)" : "rgba(245,230,200,0.12)"}`, borderRadius: 8, padding: "12px 14px", color: "#F5E6C8", fontSize: 14, outline: "none", fontFamily: "Outfit, sans-serif" }} />
+      {codeErr && <div style={{ fontSize: 10, color: "#C73E3E", marginTop: 4, fontFamily: "Oswald, sans-serif" }}>Incorrect code</div>}
     </div>}
-    <button onClick={handleSubmit} disabled={!name.trim() || !role} style={{ width: "100%", padding: "12px", borderRadius: 8, border: "none", fontSize: 14, fontWeight: 600, cursor: "pointer", background: name.trim() && role ? "linear-gradient(135deg,#00f0ff,#0088aa)" : "rgba(255,255,255,0.05)", color: name.trim() && role ? "#fff" : "#555" }}>Get Started</button>
+    <button onClick={handleSubmit} disabled={!name.trim() || !role} style={{ width: "100%", padding: "12px", borderRadius: 8, border: "2px solid rgba(245,166,35,0.3)", fontSize: 15, fontWeight: 600, cursor: "pointer", background: name.trim() && role ? "linear-gradient(135deg,#F5A623,#D4941C)" : "rgba(245,230,200,0.05)", color: name.trim() && role ? "#1a1410" : "#555", fontFamily: "Oswald, sans-serif", letterSpacing: 1, textTransform: "uppercase" }}>Get Started</button>
   </div>;
 }

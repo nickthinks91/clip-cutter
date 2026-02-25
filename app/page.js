@@ -2,7 +2,99 @@
 import { useState, useRef, useEffect } from "react";
 import { getSongs, createSong, deleteSong as dbDeleteSong, uploadAudio, getAudioUrl, saveAiClips, getAiClips, submitPicks as dbSubmitPicks, getSubmissions, subscribeToSubmissions, findViralMatch, getViralPatterns, getTopViralSounds, getViralPositionPatterns, getAlbums, createAlbum, updateAlbum, deleteAlbum, getAlbumSongs, getAlbumProgress, getAlbumAllProgress, updateSong } from "../lib/supabase";
 
-/* ═══ AUDIO ANALYSIS ═══ */
+/* ═══ AUDIO CONVERSION ═══ */
+// Convert any audio file to a browser-friendly WAV (16-bit 44.1kHz mono)
+// This handles 24-bit, 96kHz, and other exotic formats
+async function convertToWebAudio(file) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 44100 });
+    const ab = await file.arrayBuffer();
+    let buf;
+    try {
+      buf = await ctx.decodeAudioData(ab);
+    } catch (decodeErr) {
+      // If browser can't decode, try manual WAV parsing for 24-bit files
+      buf = await manualWavDecode(ab, ctx);
+    }
+    if (!buf) { ctx.close(); return null; }
+    // Re-encode as 16-bit 44.1kHz WAV
+    const numSamples = Math.floor(buf.duration * 44100);
+    const offCtx = new OfflineAudioContext(1, numSamples, 44100);
+    const src = offCtx.createBufferSource();
+    src.buffer = buf;
+    src.connect(offCtx.destination);
+    src.start(0);
+    const rendered = await offCtx.startRendering();
+    const wavBlob = encodeWav(rendered);
+    ctx.close();
+    return { blob: wavBlob, duration: buf.duration, buffer: rendered };
+  } catch (e) {
+    console.error('Conversion error:', e);
+    return null;
+  }
+}
+
+// Manual WAV parser for 24-bit and other formats browsers can't decode
+async function manualWavDecode(arrayBuffer, ctx) {
+  const view = new DataView(arrayBuffer);
+  // Check RIFF header
+  const riff = String.fromCharCode(view.getUint8(0), view.getUint8(1), view.getUint8(2), view.getUint8(3));
+  if (riff !== 'RIFF') return null;
+  
+  // Find fmt chunk
+  let offset = 12;
+  let fmtOffset = -1, dataOffset = -1, dataSize = 0;
+  let channels = 1, sampleRate = 44100, bitsPerSample = 16;
+  
+  while (offset < view.byteLength - 8) {
+    const id = String.fromCharCode(view.getUint8(offset), view.getUint8(offset+1), view.getUint8(offset+2), view.getUint8(offset+3));
+    const size = view.getUint32(offset + 4, true);
+    if (id === 'fmt ') {
+      fmtOffset = offset + 8;
+      channels = view.getUint16(fmtOffset + 2, true);
+      sampleRate = view.getUint32(fmtOffset + 4, true);
+      bitsPerSample = view.getUint16(fmtOffset + 14, true);
+    } else if (id === 'data') {
+      dataOffset = offset + 8;
+      dataSize = size;
+      break;
+    }
+    offset += 8 + size;
+    if (size % 2 !== 0) offset++; // padding byte
+  }
+  
+  if (dataOffset < 0 || fmtOffset < 0) return null;
+  
+  const bytesPerSample = bitsPerSample / 8;
+  const numSamples = Math.floor(dataSize / (bytesPerSample * channels));
+  const buffer = ctx.createBuffer(1, numSamples, sampleRate);
+  const output = buffer.getChannelData(0);
+  
+  for (let i = 0; i < numSamples; i++) {
+    const bytePos = dataOffset + i * bytesPerSample * channels;
+    if (bytePos + bytesPerSample > view.byteLength) break;
+    
+    let sample = 0;
+    if (bitsPerSample === 24) {
+      // 24-bit signed integer
+      const b0 = view.getUint8(bytePos);
+      const b1 = view.getUint8(bytePos + 1);
+      const b2 = view.getUint8(bytePos + 2);
+      sample = ((b2 << 16) | (b1 << 8) | b0);
+      if (sample >= 0x800000) sample -= 0x1000000;
+      sample /= 0x800000;
+    } else if (bitsPerSample === 32) {
+      sample = view.getFloat32(bytePos, true);
+    } else if (bitsPerSample === 16) {
+      sample = view.getInt16(bytePos, true) / 32768;
+    }
+    output[i] = sample;
+  }
+  
+  return buffer;
+}
+
+
 function analyzeAudio(audioBuffer) {
   const sr = audioBuffer.sampleRate, data = audioBuffer.getChannelData(0), duration = audioBuffer.duration;
   const frameSize = Math.floor(sr * 0.05), hopSize = Math.floor(frameSize / 2);
@@ -211,7 +303,15 @@ export default function App() {
       const ctx = new (window.AudioContext || window.webkitAudioContext)(); actx.current = ctx;
       const resp = await fetch(url);
       const ab = await resp.arrayBuffer();
-      const buf = await ctx.decodeAudioData(ab); abuf.current = buf;
+      let buf;
+      try {
+        buf = await ctx.decodeAudioData(ab.slice(0)); // slice to copy since decodeAudioData detaches
+      } catch (decodeErr) {
+        console.log('Standard decode failed, trying manual WAV parse...');
+        buf = await manualWavDecode(ab, ctx);
+      }
+      if (!buf) throw new Error('Could not decode audio');
+      abuf.current = buf;
       const res = analyzeAudio(buf); setAnalysis(res); setEnergy(res.energy); scoreFn.current = res.scoreClip;
       return res;
     } catch (e) { console.error(e); flash("Error loading audio"); return null; }
@@ -223,7 +323,16 @@ export default function App() {
     setAudioLoading(true);
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)(); actx.current = ctx;
-      const buf = await ctx.decodeAudioData(await f.arrayBuffer()); abuf.current = buf;
+      const ab = await f.arrayBuffer();
+      let buf;
+      try {
+        buf = await ctx.decodeAudioData(ab.slice(0));
+      } catch (decodeErr) {
+        console.log('Standard decode failed, trying manual WAV parse...');
+        buf = await manualWavDecode(ab, ctx);
+      }
+      if (!buf) throw new Error('Could not decode audio');
+      abuf.current = buf;
       const res = analyzeAudio(buf); setAnalysis(res); setEnergy(res.energy); scoreFn.current = res.scoreClip;
       return { res, file: f };
     } catch (e2) { console.error(e2); flash("Error loading audio"); return null; }
@@ -343,11 +452,11 @@ export default function App() {
 
   // Load audio for a song (streams from Supabase)
   const streamSongAudio = async (song) => {
-    if (!song?.audio_path) return false;
+    if (!song?.audio_path) return null;
     const url = getAudioUrl(song.audio_path);
-    if (!url) return false;
+    if (!url) return null;
     const res = await loadAudioFromUrl(url);
-    return !!res;
+    return res;
   };
 
   // Clip ops
@@ -404,13 +513,26 @@ export default function App() {
     const sameSong = songId === activeSong;
     setActiveSong(songId);
     const s = await getSubmissions(songId);
-    const ai = await getAiClips(songId);
+    let ai = await getAiClips(songId);
     setSubs(s); setAiClips(ai); setConsensus(buildConsensus(s)); setPage("review");
     if (!sameSong) {
       setEnergy([]); abuf.current = null; actx.current = null;
       setAnalysis(song ? { duration: song.duration, bpm: song.bpm } : null);
-      // Auto-stream audio if available
-      if (song?.audio_path) streamSongAudio(song);
+      if (song?.audio_path) {
+        const res = await streamSongAudio(song);
+        // If no AI clips exist yet (album upload), generate them now
+        if (res && ai.length === 0) {
+          const analysis = analyzeAudio(abuf.current);
+          const topClips = analysis.topClips;
+          await saveAiClips(songId, topClips);
+          // Also update song duration/bpm if missing
+          if (!song.duration || song.duration === 0) {
+            await updateSong(songId, { duration: analysis.duration, bpm: analysis.bpm });
+          }
+          ai = topClips;
+          setAiClips(ai);
+        }
+      }
     }
     setClips(ai.map((c, i) => ({ ...c, id: `a${i}`, isManual: false, notes: "", dur: Math.round(c.endTime - c.startTime), origStart: c.startTime, origEnd: c.endTime })));
     setSel(0); setDl({}); setZoom(null);
@@ -472,13 +594,35 @@ export default function App() {
 
     for (let i = 0; i < audioFiles.length; i++) {
       const af = audioFiles[i];
-      setAlbumUploadProgress(`Uploading ${i + 1}/${audioFiles.length}: ${af.name.replace(/\.[^.]+$/, '').slice(0, 40)}`);
+      setAlbumUploadProgress(`Converting & uploading ${i + 1}/${audioFiles.length}: ${af.name.replace(/\.[^.]+$/, '').slice(0, 35)}`);
       try {
         const songName = af.name.replace(/\.[^.]+$/, '');
-        // Just create the song and upload — NO audio analysis yet
-        // Analysis happens when someone opens the song to cut clips
-        const song = await createSong({ name: songName, duration: 0, bpm: 0, shareLink: "", albumId: activeAlbum, trackNumber: trackNum });
-        await uploadAudio(af, song.id);
+        
+        // Convert to browser-friendly WAV (handles 24-bit, 96kHz, etc)
+        const converted = await convertToWebAudio(af);
+        let uploadFile = af;
+        let duration = 0;
+        let bpm = 0;
+        
+        if (converted) {
+          uploadFile = new File([converted.blob], songName + '.wav', { type: 'audio/wav' });
+          duration = Math.round(converted.duration * 10) / 10;
+          // Quick BPM from the already-decoded buffer
+          try {
+            const res = analyzeAudio(converted.buffer);
+            bpm = res.bpm;
+            // Save AI clips too since we already have the analysis
+            const song = await createSong({ name: songName, duration, bpm, shareLink: "", albumId: activeAlbum, trackNumber: trackNum });
+            await uploadAudio(uploadFile, song.id);
+            await saveAiClips(song.id, res.topClips);
+            trackNum++;
+            continue;
+          } catch (ae) { console.error('Analysis error, uploading without:', ae); }
+        }
+        
+        // Fallback: upload without conversion/analysis
+        const song = await createSong({ name: songName, duration, bpm, shareLink: "", albumId: activeAlbum, trackNumber: trackNum });
+        await uploadAudio(uploadFile, song.id);
         trackNum++;
       } catch (ue) { console.error('Upload error for', af.name, ue); }
     }

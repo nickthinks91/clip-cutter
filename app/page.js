@@ -146,7 +146,7 @@ function buildConsensus(submissions, threshold = 8) {
   if (!all.length) return [];
   const sorted = [...all].sort((a, b) => a.startTime - b.startTime);
   const clusters = []; let cur = [sorted[0]];
-  for (let i = 1; i < sorted.length; i++) { if (sorted[i].startTime - cur[cur.length - 1].startTime <= threshold) cur.push(sorted[i]); else { clusters.push(cur); cur = [sorted[i]]; } } clusters.push(cur);
+  for (let i = 1; i < sorted.length; i++) { if (sorted[i].startTime - cur[0].startTime <= threshold) cur.push(sorted[i]); else { clusters.push(cur); cur = [sorted[i]]; } } clusters.push(cur);
   return clusters.map(cl => {
     const avgS = Math.min(...cl.map(c => c.startTime)), avgE = Math.max(...cl.map(c => c.endTime));
     const center = (avgS + avgE) / 2;

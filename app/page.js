@@ -141,16 +141,23 @@ function analyzeAudio(audioBuffer) {
 }
 
 /* ═══ CONSENSUS ═══ */
-function buildConsensus(submissions, threshold = 8) {
+function buildConsensus(submissions, threshold = 5) {
   const all = []; submissions.forEach(s => (s.clips || []).forEach(c => all.push({ ...c, member: s.member })));
   if (!all.length) return [];
   const sorted = [...all].sort((a, b) => a.startTime - b.startTime);
+  // Compare against FIRST clip in cluster, not previous, to prevent chaining
   const clusters = []; let cur = [sorted[0]];
-  for (let i = 1; i < sorted.length; i++) { if (sorted[i].startTime - cur[cur.length - 1].startTime <= threshold) cur.push(sorted[i]); else { clusters.push(cur); cur = [sorted[i]]; } } clusters.push(cur);
+  for (let i = 1; i < sorted.length; i++) { if (sorted[i].startTime - cur[0].startTime <= threshold) cur.push(sorted[i]); else { clusters.push(cur); cur = [sorted[i]]; } } clusters.push(cur);
   return clusters.map(cl => {
-    const avgS = cl.reduce((s, c) => s + c.startTime, 0) / cl.length, avgE = cl.reduce((s, c) => s + c.endTime, 0) / cl.length;
-    const members = [...new Set(cl.map(c => c.member))];
-    return { startTime: avgS, endTime: avgE, dur: Math.round(avgE - avgS), memberCount: members.length, members, total: submissions.length, agreement: members.length / submissions.length, picks: cl };
+    const anchorStart = cl[0].startTime;
+    // Each member appears once: pick the clip whose startTime is closest to anchor
+    const byMember = {};
+    cl.forEach(c => { const dist = Math.abs(c.startTime - anchorStart); if (!byMember[c.member] || dist < Math.abs(byMember[c.member].startTime - anchorStart)) byMember[c.member] = c; });
+    const picks = Object.values(byMember);
+    const startTime = Math.min(...picks.map(c => c.startTime));
+    const endTime = Math.max(...picks.map(c => c.endTime));
+    const members = picks.map(c => c.member);
+    return { startTime, endTime, dur: Math.round(endTime - startTime), memberCount: members.length, members, total: submissions.length, agreement: members.length / submissions.length, picks };
   }).sort((a, b) => b.memberCount - a.memberCount);
 }
 

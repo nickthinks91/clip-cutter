@@ -550,6 +550,13 @@ export default function App() {
       const url = getAudioUrl(song.audio_path);
       if (url) loadAudioFromUrl(url);
     }
+    // Restore prior submission if one exists for this member
+    const subs = await getSubmissions(songId);
+    const mine = subs.find(s => s.member === user?.name);
+    if (mine && mine.clips.length > 0) {
+      setClips(mine.clips.map((c, i) => ({ ...c, id: `s${i}`, isManual: true, dur: Math.round(c.endTime - c.startTime) })));
+      setSubmitted(true);
+    }
   };
 
   const refreshSubs = async () => { if (!activeSong) return; const s = await getSubmissions(activeSong); setSubs(s); setConsensus(buildConsensus(s)); flash("Refreshed!"); };

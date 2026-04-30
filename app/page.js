@@ -181,8 +181,8 @@ function Waveform({ energy, duration, clips, highlights, selClip, onSel, onCreat
     const gs = zD < 30 ? 1 : zD < 120 ? 5 : 10;
     ctx.strokeStyle = "rgba(245,230,200,0.04)"; ctx.lineWidth = 1;
     for (let t = Math.ceil(zS / gs) * gs; t <= zE; t += gs) { const x = t2x(t, w); ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
-    (highlights || []).forEach(hl => { const x1 = Math.max(0, t2x(hl.startTime, w)), x2 = Math.min(w, t2x(hl.endTime, w)); if (x2 < 0 || x1 > w) return; ctx.fillStyle = hl.color || "rgba(245,166,35,0.08)"; ctx.fillRect(x1, 0, x2 - x1, h); if (hl.label && x2 - x1 > 30) { ctx.fillStyle = hl.lc || "rgba(245,166,35,0.5)"; ctx.font = "bold 9px Fredoka, sans-serif"; ctx.fillText(hl.label, x1 + 4, h - 5); } });
-    (clips || []).forEach((cl, idx) => { const x1 = Math.max(0, t2x(cl.startTime, w)), x2 = Math.min(w, t2x(cl.endTime, w)); if (x2 < 0 || x1 > w) return; const isSel = idx === selClip; ctx.fillStyle = isSel ? "rgba(245,166,35,0.15)" : "rgba(245,230,200,0.03)"; ctx.fillRect(x1, 0, x2 - x1, h); if (!readonly) { ctx.fillStyle = isSel ? "rgba(245,166,35,0.6)" : "rgba(245,230,200,0.12)"; ctx.fillRect(x1, 0, 3, h); ctx.fillRect(x2 - 3, 0, 3, h); } ctx.fillStyle = isSel ? "#F5A623" : "rgba(245,230,200,0.3)"; ctx.font = "bold 10px Fredoka, sans-serif"; const lbl = cl.isManual ? "✎" : `#${idx + 1}`; if (x2 - x1 > 30) ctx.fillText(lbl, x1 + 5, 13); });
+    (highlights || []).forEach(hl => { const x1 = Math.max(0, t2x(hl.startTime, w)), x2 = Math.min(w, t2x(hl.endTime, w)); if (x2 < 0 || x1 > w) return; ctx.fillStyle = hl.color || "rgba(245,166,35,0.08)"; ctx.fillRect(x1, 0, x2 - x1, h); if (hl.bordered) { ctx.fillStyle = hl.lc || "rgba(68,204,102,0.7)"; ctx.fillRect(x1, 0, 2, h); ctx.fillRect(Math.max(x1, x2 - 2), 0, 2, h); } if (hl.label && x2 - x1 > 20) { ctx.font = "bold 9px Fredoka, sans-serif"; if (hl.topLabel) { const tw = ctx.measureText(hl.label).width; ctx.fillStyle = "rgba(0,0,0,0.65)"; ctx.fillRect(x1 + 3, 2, tw + 6, 13); ctx.fillStyle = hl.lc || "rgba(68,204,102,0.9)"; ctx.fillText(hl.label, x1 + 6, 12); } else { ctx.fillStyle = hl.lc || "rgba(245,166,35,0.5)"; ctx.fillText(hl.label, x1 + 4, h - 5); } } });
+    (clips || []).forEach((cl, idx) => { const x1 = Math.max(0, t2x(cl.startTime, w)), x2 = Math.min(w, t2x(cl.endTime, w)); if (x2 < 0 || x1 > w) return; const isSel = idx === selClip; ctx.fillStyle = isSel ? "rgba(245,166,35,0.15)" : "rgba(245,230,200,0.03)"; ctx.fillRect(x1, 0, x2 - x1, h); if (!readonly) { ctx.fillStyle = isSel ? "rgba(245,166,35,0.6)" : "rgba(245,230,200,0.12)"; ctx.fillRect(x1, 0, 3, h); ctx.fillRect(x2 - 3, 0, 3, h); } ctx.font = "bold 10px Fredoka, sans-serif"; const lbl = cl.isManual ? "✎" : `#${idx + 1}`; if (x2 - x1 > 30) { const tw = ctx.measureText(lbl).width; ctx.fillStyle = "rgba(0,0,0,0.65)"; ctx.fillRect(x1 + 3, 2, tw + 6, 13); ctx.fillStyle = isSel ? "#F5A623" : "rgba(245,230,200,0.9)"; ctx.fillText(lbl, x1 + 6, 12); } });
     const si = Math.floor((zS / duration) * energy.length), ei = Math.floor((zE / duration) * energy.length);
     ctx.beginPath(); ctx.moveTo(0, h); for (let x = 0; x < w; x++) { const eI = si + Math.floor((x / w) * (ei - si)); ctx.lineTo(x, h - (energy[Math.min(eI, energy.length - 1)] || 0) * h * 0.85); } ctx.lineTo(w, h); ctx.closePath();
     const g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, "rgba(245,166,35,0.6)"); g.addColorStop(0.5, "rgba(199,62,62,0.25)"); g.addColorStop(1, "rgba(212,148,28,0.03)"); ctx.fillStyle = g; ctx.fill();
@@ -208,8 +208,9 @@ function Waveform({ energy, duration, clips, highlights, selClip, onSel, onCreat
 function AgreementBar({ count, total }) { const pct = total > 0 ? (count / total) * 100 : 0; const color = pct >= 70 ? "#44cc66" : pct >= 40 ? "#F5A623" : "#C73E3E"; return <div style={{ display: "flex", alignItems: "center", gap: 8 }}><div style={{ flex: 1, height: 6, background: "rgba(245,230,200,0.08)", borderRadius: 3, overflow: "hidden" }}><div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: 3 }} /></div><span style={{ fontSize: 11, fontWeight: 700, color, fontFamily: "Fredoka, sans-serif", minWidth: 40 }}>{count}/{total}</span></div>; }
 
 
-function ClipCard({ c, idx, sel, playing, isModified, bs, onSel, onPlay, onExport, onDur, onNote, onAB, onRevert, onDel, editNote, setEditNote, ab, clips }) {
+function ClipCard({ c, idx, sel, playing, playingClip, isModified, bs, onSel, onPlay, onExport, onDur, onNote, onAB, onRevert, onDel, editNote, setEditNote, ab, clips }) {
   const isSel = idx === sel;
+  const isPlaying = playingClip === idx;
   return (
     <div onClick={() => onSel(idx)} style={{ background: isSel ? "rgba(245,166,35,0.035)" : "rgba(245,230,200,0.01)", border: `1px solid ${isSel ? "rgba(245,166,35,0.15)" : "rgba(245,230,200,0.035)"}`, borderRadius: 8, padding: "10px 12px", cursor: "pointer", transition: "all 0.2s" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
@@ -223,7 +224,7 @@ function ClipCard({ c, idx, sel, playing, isModified, bs, onSel, onPlay, onExpor
         </div>
         <div style={{ display: "flex", gap: 3, alignItems: "center", flexShrink: 0 }}>
           <div style={{ display: "flex", gap: 2 }}>{[15, 30, 60].map(d => <button key={d} onClick={e => { e.stopPropagation(); onDur(idx, d); }} style={{ ...bs(c.dur === d), padding: "2px 5px", fontSize: 8 }}>{d}s</button>)}</div>
-          <button onClick={e => { e.stopPropagation(); onPlay(idx); }} style={{ width: 28, height: 28, borderRadius: "50%", background: playing && isSel ? "linear-gradient(135deg,#C73E3E,#ff6644)" : "linear-gradient(135deg,#F5A623,#0088aa)", border: "none", color: "#fff", fontSize: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{playing && isSel ? "■" : "▶"}</button>
+          <button onClick={e => { e.stopPropagation(); onPlay(idx); }} style={{ width: 28, height: 28, borderRadius: "50%", background: isPlaying ? "linear-gradient(135deg,#C73E3E,#ff6644)" : "linear-gradient(135deg,#F5A623,#0088aa)", border: "none", color: "#fff", fontSize: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{isPlaying ? "■" : "▶"}</button>
           <button onClick={e => { e.stopPropagation(); onExport(idx); }} style={{ background: "rgba(245,230,200,0.04)", border: "1px solid rgba(245,230,200,0.07)", color: "#ccc", fontSize: 9, padding: "3px 8px", borderRadius: 4, cursor: "pointer", fontFamily: "Fredoka, sans-serif" }}>⬇</button>
         </div>
       </div>
@@ -266,6 +267,8 @@ export default function App() {
   const [lastTapTime, setLastTapTime] = useState(0);
   const [playingFull, setPlayingFull] = useState(false), [fullProgress, setFullProgress] = useState(0);
   const [activeRange, setActiveRange] = useState(null);
+  const [playingClipIdx, setPlayingClipIdx] = useState(null);
+  const [playheadPos, setPlayheadPos] = useState(null);
   const [viralInfo, setViralInfo] = useState(null); // { matches, matchType, patterns, genre }
   const [selectedGenre, setSelectedGenre] = useState(null); // genre for viral intelligence
   const [albums, setAlbums] = useState([]);
@@ -470,7 +473,7 @@ export default function App() {
 
   // Playback
   const playingClipRef = useRef(null);
-  const stopPlay = () => { playGen.current++; if (src.current) try { src.current.onended = null; src.current.stop(); } catch (e) { } src.current = null; cancelAnimationFrame(af.current); setPlaying(false); setProgress(0); setPlayingFull(false); setFullProgress(0); setActiveRange(null); playingClipRef.current = null; };
+  const stopPlay = () => { playGen.current++; if (src.current) try { src.current.onended = null; src.current.stop(); } catch (e) { } src.current = null; cancelAnimationFrame(af.current); setPlaying(false); setProgress(0); setPlayingFull(false); setFullProgress(0); setActiveRange(null); setPlayingClipIdx(null); setPlayheadPos(null); playingClipRef.current = null; };
   const playClip = idx => {
     const cl = clips[idx]; if (!actx.current || !abuf.current || !cl) return;
     const wasSame = playingClipRef.current === idx && playing;
@@ -479,11 +482,11 @@ export default function App() {
     playGen.current++; const gen = playGen.current;
     const s = actx.current.createBufferSource(); s.buffer = abuf.current; s.connect(actx.current.destination);
     s.start(0, cl.startTime, cl.endTime - cl.startTime); src.current = s; stT.current = actx.current.currentTime;
-    setPlaying(true); setSel(idx); setActiveRange(null); playingClipRef.current = idx; const dur = cl.endTime - cl.startTime;
-    const tick = () => { if (playGen.current !== gen) return; const el = actx.current.currentTime - stT.current; setProgress(Math.min(1, el / dur)); if (el < dur) af.current = requestAnimationFrame(tick); else { setPlaying(false); setProgress(0); playingClipRef.current = null; } };
-    af.current = requestAnimationFrame(tick); s.onended = () => { if (playGen.current !== gen) return; setPlaying(false); setProgress(0); playingClipRef.current = null; cancelAnimationFrame(af.current); };
+    setPlaying(true); setSel(idx); setActiveRange(null); setPlayingClipIdx(idx); playingClipRef.current = idx; const dur = cl.endTime - cl.startTime;
+    const tick = () => { if (playGen.current !== gen) return; const el = actx.current.currentTime - stT.current; setProgress(Math.min(1, el / dur)); setPlayheadPos(cl.startTime + Math.min(el, dur)); if (el < dur) af.current = requestAnimationFrame(tick); else { setPlaying(false); setProgress(0); setPlayingClipIdx(null); setPlayheadPos(null); playingClipRef.current = null; } };
+    af.current = requestAnimationFrame(tick); s.onended = () => { if (playGen.current !== gen) return; setPlaying(false); setProgress(0); setPlayingClipIdx(null); setPlayheadPos(null); playingClipRef.current = null; cancelAnimationFrame(af.current); };
   };
-  const playRange = (st, et, rangeKey) => { if (!actx.current || !abuf.current) return; stopPlay(); playGen.current++; const gen = playGen.current; const s = actx.current.createBufferSource(); s.buffer = abuf.current; s.connect(actx.current.destination); s.start(0, st, et - st); src.current = s; setPlaying(true); if (rangeKey) setActiveRange(rangeKey); s.onended = () => { if (playGen.current !== gen) return; setPlaying(false); setActiveRange(null); }; };
+  const playRange = (st, et, rangeKey) => { if (!actx.current || !abuf.current) return; stopPlay(); playGen.current++; const gen = playGen.current; const s = actx.current.createBufferSource(); s.buffer = abuf.current; s.connect(actx.current.destination); s.start(0, st, et - st); src.current = s; stT.current = actx.current.currentTime; setPlaying(true); if (rangeKey) setActiveRange(rangeKey); const dur = et - st; const tick = () => { if (playGen.current !== gen) return; const el = actx.current.currentTime - stT.current; setPlayheadPos(st + Math.min(el, dur)); if (el < dur) af.current = requestAnimationFrame(tick); else { setPlaying(false); setActiveRange(null); setPlayheadPos(null); } }; af.current = requestAnimationFrame(tick); s.onended = () => { if (playGen.current !== gen) return; setPlaying(false); setActiveRange(null); setPlayheadPos(null); cancelAnimationFrame(af.current); }; };
 
   const playFull = (startFrom = 0) => {
     if (!actx.current || !abuf.current) return;
@@ -493,9 +496,9 @@ export default function App() {
     const s = actx.current.createBufferSource(); s.buffer = abuf.current; s.connect(actx.current.destination);
     s.start(0, startFrom, dur - startFrom); src.current = s; stT.current = actx.current.currentTime - startFrom;
     setPlaying(true); setPlayingFull(true);
-    const tick = () => { if (playGen.current !== gen) return; const el = actx.current.currentTime - stT.current; const p = Math.min(1, el / dur); setFullProgress(p); if (el < dur) af.current = requestAnimationFrame(tick); else { setPlaying(false); setPlayingFull(false); setFullProgress(0); } };
+    const tick = () => { if (playGen.current !== gen) return; const el = actx.current.currentTime - stT.current; const p = Math.min(1, el / dur); setFullProgress(p); setPlayheadPos(Math.min(el, dur)); if (el < dur) af.current = requestAnimationFrame(tick); else { setPlaying(false); setPlayingFull(false); setFullProgress(0); setPlayheadPos(null); } };
     af.current = requestAnimationFrame(tick);
-    s.onended = () => { if (playGen.current !== gen) return; setPlaying(false); setPlayingFull(false); setFullProgress(0); cancelAnimationFrame(af.current); };
+    s.onended = () => { if (playGen.current !== gen) return; setPlaying(false); setPlayingFull(false); setFullProgress(0); setPlayheadPos(null); cancelAnimationFrame(af.current); };
   };
 
   // Export
@@ -721,7 +724,7 @@ export default function App() {
   const bs = active => ({ background: active ? "rgba(245,166,35,0.12)" : "rgba(245,230,200,0.04)", border: `1px solid ${active ? "rgba(245,166,35,0.3)" : "rgba(245,230,200,0.08)"}`, color: active ? "#F5A623" : "#9B8B73", padding: "5px 12px", borderRadius: 6, fontSize: 11, cursor: "pointer", fontFamily: "Fredoka, sans-serif", transition: "all 0.2s", letterSpacing: "0.5px" });
   const cs = active => ({ background: active ? "rgba(245,166,35,0.05)" : "rgba(245,230,200,0.015)", border: `1px solid ${active ? "rgba(245,166,35,0.2)" : "rgba(245,230,200,0.05)"}`, borderRadius: 9, padding: "12px 14px", cursor: "pointer", transition: "all 0.2s" });
   const selC = clips[sel];
-  const playheadTime = playingFull && analysis?.duration ? fullProgress * analysis.duration : null;
+  const playheadTime = playheadPos;
   const startAB = (idx, other) => setAb({ a: idx, b: other !== undefined ? other : (idx === 0 ? 1 : 0) });
 
   if (!userLoaded) return <div style={{ minHeight: "100vh", background: "#000000", display: "flex", alignItems: "center", justifyContent: "center", color: "#9B8B73", fontFamily: "DM Sans, sans-serif" }}>Loading...</div>;
@@ -928,7 +931,7 @@ export default function App() {
           </div>}
           {ab && <div style={{ background: "rgba(199,62,62,0.05)", border: "1px solid rgba(199,62,62,0.15)", borderRadius: 7, padding: "8px 12px", marginBottom: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}><span style={{ fontSize: 10, color: "#C73E3E", fontWeight: 600, fontFamily: "Fredoka, sans-serif" }}>A/B</span><button onClick={() => playClip(ab.a)} style={{ ...bs(playing && sel === ab.a), padding: "4px 12px" }}>▶ A ({fmt(clips[ab.a]?.startTime)})</button><span style={{ color: "#444", fontSize: 10 }}>vs</span><button onClick={() => playClip(ab.b)} style={{ ...bs(playing && sel === ab.b), padding: "4px 12px" }}>▶ B ({fmt(clips[ab.b]?.startTime)})</button><button onClick={() => { stopPlay(); setAb(null); }} style={{ marginLeft: "auto", background: "rgba(245,230,200,0.04)", border: "1px solid rgba(245,230,200,0.08)", color: "#9B8B73", fontSize: 9, padding: "3px 8px", borderRadius: 4, cursor: "pointer" }}>✕</button></div>}
           {clips.length > 0 && <div style={{ display: "flex", gap: 5, marginBottom: 12, alignItems: "center" }}><button onClick={expAll} style={{ background: "linear-gradient(135deg,rgba(245,166,35,0.1),rgba(199,62,62,0.06))", border: "1px solid rgba(245,166,35,0.18)", color: "#F5A623", fontSize: 10, fontWeight: 600, padding: "7px 14px", borderRadius: 6, cursor: "pointer", fontFamily: "Fredoka, sans-serif" }}>⬇ Download All {clips.length}</button>{Object.keys(dl).length > 0 && <span style={{ fontSize: 9, color: "#44cc66", fontFamily: "Fredoka, sans-serif" }}>✓ {Object.keys(dl).length}/{clips.length}</span>}</div>}
-          <div style={{ display: "grid", gap: 7, marginBottom: 20 }}>{clips.map((c, idx) => <ClipCard key={c.id || idx} c={c} idx={idx} sel={sel} playing={playing} isModified={isModified(c)} bs={bs} onSel={setSel} onPlay={playClip} onExport={expClip} onDur={setClipDur} onNote={updateNote} onAB={startAB} onRevert={revertClip} onDel={delClip} editNote={editNote} setEditNote={setEditNote} ab={ab} clips={clips} />)}</div>
+          <div style={{ display: "grid", gap: 7, marginBottom: 20 }}>{clips.map((c, idx) => <ClipCard key={c.id || idx} c={c} idx={idx} sel={sel} playing={playing} playingClip={playingClipIdx} isModified={isModified(c)} bs={bs} onSel={setSel} onPlay={playClip} onExport={expClip} onDur={setClipDur} onNote={updateNote} onAB={startAB} onRevert={revertClip} onDel={delClip} editNote={editNote} setEditNote={setEditNote} ab={ab} clips={clips} />)}</div>
         </div>}
 
         {/* LEADER: REVIEW */}
@@ -959,7 +962,7 @@ export default function App() {
             </div>)}</div>
           </div>}
           {hasAudio && <div style={{ marginBottom: 20 }}>
-            <Waveform energy={energy} duration={analysis.duration} clips={clips} highlights={[...consensus.map((c, i) => ({ startTime: c.startTime, endTime: c.endTime, color: c.agreement >= 0.7 ? "rgba(68,204,102,0.1)" : "rgba(245,166,35,0.06)", label: `C${i + 1} (${c.memberCount}/${c.total})`, lc: c.agreement >= 0.7 ? "rgba(68,204,102,0.5)" : "rgba(245,166,35,0.4)" })), ...(showIndiv ? subs.flatMap(s => (s.clips || []).map(c => ({ startTime: c.startTime, endTime: c.endTime, color: "rgba(199,62,62,0.04)", label: "" }))) : [])]} selClip={sel} onSel={setSel} onCreate={createClip} onEdge={dragEdge} onMove={moveClip} zoom={zoom || [0, analysis.duration]} onZoom={setZoom} readonly={false} onPlayFrom={t => { setLastTapTime(t); playFull(t); }} playheadTime={playheadTime} />
+            <Waveform energy={energy} duration={analysis.duration} clips={clips} highlights={[...consensus.map((c, i) => ({ startTime: c.startTime, endTime: c.endTime, color: c.agreement >= 0.7 ? "rgba(68,204,102,0.13)" : "rgba(245,166,35,0.08)", label: `C${i + 1} (${c.memberCount}/${c.total})`, lc: c.agreement >= 0.7 ? "rgba(68,204,102,0.8)" : "rgba(245,166,35,0.7)", bordered: true, topLabel: true })), ...(showIndiv ? subs.flatMap(s => (s.clips || []).map(c => ({ startTime: c.startTime, endTime: c.endTime, color: "rgba(199,62,62,0.04)", label: "" }))) : [])]} selClip={sel} onSel={setSel} onCreate={createClip} onEdge={dragEdge} onMove={moveClip} zoom={zoom || [0, analysis.duration]} onZoom={setZoom} readonly={false} onPlayFrom={t => { setLastTapTime(t); playFull(t); }} playheadTime={playheadTime} />
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, marginBottom: 4 }}>
               <button onClick={() => playFull(0)} style={{ width: 32, height: 32, borderRadius: "50%", background: playingFull ? "linear-gradient(135deg,#C73E3E,#ff6644)" : "linear-gradient(135deg,#F5A623,#0088aa)", border: "none", color: "#fff", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{playingFull ? "■" : "▶"}</button>
               <div style={{ flex: 1, height: 3, background: "rgba(245,230,200,0.06)", borderRadius: 2, overflow: "hidden" }}><div style={{ width: `${fullProgress * 100}%`, height: "100%", background: "linear-gradient(90deg,#F5A623,#C73E3E)", transition: "width 0.1s linear" }} /></div>
@@ -969,7 +972,7 @@ export default function App() {
           </div>}
           {clips.length > 0 && <div style={{ marginBottom: 20 }}>
             <div style={{ display: "flex", gap: 5, marginBottom: 8, alignItems: "center" }}><div style={{ fontSize: 10, fontFamily: "Fredoka, sans-serif", color: "#F5A623", letterSpacing: 2 }}>YOUR CLIPS (AI + CUSTOM)</div><div style={{ marginLeft: "auto", display: "flex", gap: 5 }}><button onClick={handleSaveLeaderClips} style={{ ...bs(dirty), padding: "4px 12px", fontSize: 9, borderColor: dirty ? "rgba(68,204,102,0.4)" : undefined, color: dirty ? "#44cc66" : undefined }}>{dirty ? "● Save Clips" : "Saved"}</button>{hasAudio && <button onClick={expAll} style={{ ...bs(true), padding: "4px 12px", fontSize: 9 }}>⬇ Download All</button>}</div></div>
-            <div style={{ display: "grid", gap: 7 }}>{clips.map((c, idx) => <ClipCard key={c.id || idx} c={c} idx={idx} sel={sel} playing={playing} isModified={isModified(c)} bs={bs} onSel={setSel} onPlay={playClip} onExport={expClip} onDur={setClipDur} onNote={updateNote} onAB={startAB} onRevert={revertClip} onDel={delClip} editNote={editNote} setEditNote={setEditNote} ab={ab} clips={clips} />)}</div>
+            <div style={{ display: "grid", gap: 7 }}>{clips.map((c, idx) => <ClipCard key={c.id || idx} c={c} idx={idx} sel={sel} playing={playing} playingClip={playingClipIdx} isModified={isModified(c)} bs={bs} onSel={setSel} onPlay={playClip} onExport={expClip} onDur={setClipDur} onNote={updateNote} onAB={startAB} onRevert={revertClip} onDel={delClip} editNote={editNote} setEditNote={setEditNote} ab={ab} clips={clips} />)}</div>
           </div>}
           <div style={{ fontSize: 10, fontFamily: "Fredoka, sans-serif", color: "#C73E3E", letterSpacing: 2, marginBottom: 8 }}>INDIVIDUAL SUBMISSIONS</div>
           {subs.length === 0 && <div style={{ color: "#555", fontSize: 12, padding: 20, textAlign: "center", border: "1px dashed rgba(245,230,200,0.06)", borderRadius: 8 }}>Waiting for team picks...</div>}

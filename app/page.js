@@ -193,7 +193,7 @@ function Waveform({ energy, duration, clips, highlights, selClip, onSel, onCreat
   const gx = e => { const r = ref.current.getBoundingClientRect(); const cx = e.touches ? e.touches[0].clientX : e.clientX; return (cx - r.left) * (800 / r.width); };
   const findEdge = cx => { if (readonly) return null; const thresh = 'ontouchstart' in window ? 20 : 10; for (let i = 0; i < (clips || []).length; i++) { const x1 = t2x(clips[i].startTime, 800), x2 = t2x(clips[i].endTime, 800); if (Math.abs(cx - x1) < thresh) return { idx: i, edge: "start" }; if (Math.abs(cx - x2) < thresh) return { idx: i, edge: "end" }; } return null; };
   const findClip = cx => { const t = x2t(cx, 800), hits = []; for (let i = 0; i < (clips || []).length; i++) if (t >= clips[i].startTime && t <= clips[i].endTime) hits.push(i); if (!hits.length) return null; if (hits.includes(selClip)) return selClip; return hits[0]; };
-  const onDown = e => { if (readonly) return; const x = gx(e); const eh = findEdge(x); if (eh) { setDrag({ type: "edge", ...eh }); return; } const hit = findClip(x); if (hit !== null) { onSel(hit); setDrag({ type: "move", idx: hit, startT: x2t(x, 800), origS: clips[hit].startTime, origE: clips[hit].endTime }); } else if (onPlayFrom) { onPlayFrom(Math.max(0, x2t(x, 800))); } };
+  const onDown = e => { if (readonly) return; const x = gx(e); const eh = findEdge(x); if (eh) { setDrag({ type: "edge", ...eh }); return; } const hit = findClip(x); if (hit !== null) { onSel(hit); setDrag({ type: "move", idx: hit, startT: x2t(x, 800), origS: clips[hit].startTime, origE: clips[hit].endTime }); } if (onPlayFrom) { onPlayFrom(Math.max(0, x2t(x, 800))); } };
   const onMv = e => { const x = gx(e); setHover(x2t(x, 800)); if (drag?.type === "move") { const dt = x2t(x, 800) - drag.startT, cd = drag.origE - drag.origS; let ns = drag.origS + dt, ne = drag.origE + dt; if (ns < 0) { ns = 0; ne = cd; } if (ne > duration) { ne = duration; ns = duration - cd; } onMove(drag.idx, ns, ne); } else if (drag?.type === "edge") onEdge(drag.idx, drag.edge, Math.max(0, Math.min(duration, x2t(x, 800)))); };
   const onUp = () => setDrag(null);
   const onDbl = e => { if (readonly) return; onCreate(Math.max(0, x2t(gx(e), 800)), null); };
@@ -487,7 +487,7 @@ export default function App() {
 
   const playFull = (startFrom = 0) => {
     if (!actx.current || !abuf.current) return;
-    if (playingFull) { stopPlay(); return; }
+    if (playingFull && startFrom === 0) { stopPlay(); return; }
     stopPlay(); playGen.current++; const gen = playGen.current;
     const dur = abuf.current.duration;
     const s = actx.current.createBufferSource(); s.buffer = abuf.current; s.connect(actx.current.destination);

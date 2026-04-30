@@ -141,16 +141,24 @@ function analyzeAudio(audioBuffer) {
 }
 
 /* ═══ CONSENSUS ═══ */
-function /* ═══ CONSENSUS ═══ */ function buildConsensus(submissions, threshold = 8) {   const all = []; submissions.forEach(s => (s.clips || []).forEach(c => all.push({ ...c, member: s.member })));   if (!all.length) return [];   const sorted = [...all].sort((a, b) => a.startTime - b.startTime);   const clusters = []; let cur = [sorted[0]];   for (let i = 1; i < sorted.length; i++) { if (sorted[i].startTime - cur[cur.length - 1].startTime <= threshold) cur.push(sorted[i]); else { clusters.push(cur); cur = [sorted[i]]; } } clusters.push(cur);   return clusters.map(cl => {     const avgS = cl.reduce((s, c) => s + c.startTime, 0) / cl.length, avgE = cl.reduce((s, c) => s + c.endTime, 0) / cl.length;     const center = (avgS + avgE) / 2;     const byMember = {};     cl.forEach(c => {       const cClipCenter = (c.startTime + c.endTime) / 2;       const dist = Math.abs(cClipCenter - center);       if (!byMember[c.member] || dist < byMember[c.member].dist) byMember[c.member] = { clip: c, dist };     });     const dedupedPicks = Object.values(byMember).map(v => v.clip);     const members = Object.keys(byMember);     return { startTime: avgS, endTime: avgE, dur: Math.round(avgE - avgS), memberCount: members.length, members, total: submissions.length, agreement: members.length / submissions.length, picks: dedupedPicks };   }).sort((a, b) => b.memberCount - a.memberCount); }(submissions, threshold = 8) {
+function buildConsensus(submissions, threshold = 8) {
   const all = []; submissions.forEach(s => (s.clips || []).forEach(c => all.push({ ...c, member: s.member })));
   if (!all.length) return [];
   const sorted = [...all].sort((a, b) => a.startTime - b.startTime);
   const clusters = []; let cur = [sorted[0]];
   for (let i = 1; i < sorted.length; i++) { if (sorted[i].startTime - cur[cur.length - 1].startTime <= threshold) cur.push(sorted[i]); else { clusters.push(cur); cur = [sorted[i]]; } } clusters.push(cur);
   return clusters.map(cl => {
-    const avgS = cl.reduce((s, c) => s + c.startTime, 0) / cl.length, avgE = cl.reduce((s, c) => s + c.endTime, 0) / cl.length;
-    const members = [...new Set(cl.map(c => c.member))];
-    return { startTime: avgS, endTime: avgE, dur: Math.round(avgE - avgS), memberCount: members.length, members, total: submissions.length, agreement: members.length / submissions.length, picks: cl };
+    const avgS = Math.min(...cl.map(c => c.startTime)), avgE = Math.max(...cl.map(c => c.endTime));
+    const center = (avgS + avgE) / 2;
+    const byMember = {};
+    cl.forEach(c => {
+      const cClipCenter = (c.startTime + c.endTime) / 2;
+      const dist = Math.abs(cClipCenter - center);
+      if (!byMember[c.member] || dist < byMember[c.member].dist) byMember[c.member] = { clip: c, dist };
+    });
+    const dedupedPicks = Object.values(byMember).map(v => v.clip);
+    const members = Object.keys(byMember);
+    return { startTime: avgS, endTime: avgE, dur: Math.round(avgE - avgS), memberCount: members.length, members, total: submissions.length, agreement: members.length / submissions.length, picks: dedupedPicks };
   }).sort((a, b) => b.memberCount - a.memberCount);
 }
 

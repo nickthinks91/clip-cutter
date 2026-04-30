@@ -486,7 +486,7 @@ export default function App() {
 
   const playFull = (startFrom = 0) => {
     if (!actx.current || !abuf.current) return;
-    if (playingFull) { stopPlay(); return; }
+    if (playingFull && startFrom === 0) { stopPlay(); return; }
     stopPlay(); playGen.current++; const gen = playGen.current;
     const dur = abuf.current.duration;
     const s = actx.current.createBufferSource(); s.buffer = abuf.current; s.connect(actx.current.destination);

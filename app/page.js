@@ -143,7 +143,7 @@ function analyzeAudio(audioBuffer) {
 /* ═══ CONSENSUS ═══ */
 function buildConsensus(submissions, threshold = 5) {
   const all = [];
-  submissions.forEach(s => (s.clips || []).forEach(c => all.push({ ...c, member: s.member })));
+  submissions.forEach(s => (s.clips || []).forEach(c => all.push({ ...c, startTime: Math.round(c.startTime), endTime: Math.round(c.endTime), member: s.member })));
   if (!all.length) return [];
   const sorted = [...all].sort((a, b) => a.startTime - b.startTime);
   const clusters = [];
@@ -169,6 +169,7 @@ function buildConsensus(submissions, threshold = 5) {
 }
 
 const norm59 = (c, dur) => { const end = Math.min(c.startTime + 59, dur > 0 ? dur : c.startTime + 59); return { ...c, endTime: end, dur: Math.round(end - c.startTime) }; };
+const roundClip = c => ({ ...c, startTime: Math.round(c.startTime), endTime: Math.round(c.endTime) });
 
 /* ═══ WAV ═══ */
 function encodeWav(ab) {
@@ -451,6 +452,7 @@ export default function App() {
       // Upload audio to storage
       await uploadAudio(f, song.id);
       // Save AI clips
+      topClips = topClips.map(roundClip);
       await saveAiClips(song.id, topClips);
       // Refresh songs list
       const allSongs = await getSongs(); setSongs(allSongs);
@@ -479,9 +481,9 @@ export default function App() {
   };
 
   // Clip ops
-  const createClip = (st, et) => { const d = analysis?.duration || 300; let s = Math.max(0, st), e = et !== null ? Math.min(d, et) : Math.min(d, s + defDur); if (e - s < 2) e = Math.min(d, s + defDur); const sc = scoreFn.current ? scoreFn.current(s, e) : {}; setClips(p => [...p, { ...sc, startTime: s, endTime: e, id: `m${Date.now()}`, isManual: true, notes: "", dur: Math.round(e - s) }]); setSel(clips.length); setDirty(true); };
-  const dragEdge = (idx, edge, t) => { setClips(p => { const u = [...p], c = { ...u[idx] }; if (edge === "start") c.startTime = Math.min(t, c.endTime - 1); else c.endTime = Math.max(t, c.startTime + 1); c.dur = Math.round(c.endTime - c.startTime); if (scoreFn.current) Object.assign(c, scoreFn.current(c.startTime, c.endTime)); u[idx] = c; return u; }); setDirty(true); };
-  const moveClip = (idx, ns, ne) => { setClips(p => { const u = [...p], c = { ...u[idx] }; c.startTime = ns; c.endTime = ne; c.dur = Math.round(ne - ns); if (scoreFn.current) Object.assign(c, scoreFn.current(ns, ne)); u[idx] = c; return u; }); setDirty(true); };
+  const createClip = (st, et) => { const d = analysis?.duration || 300; let s = Math.round(Math.max(0, st)), e = et !== null ? Math.round(Math.min(d, et)) : Math.round(Math.min(d, s + defDur)); if (e - s < 2) e = Math.min(d, s + defDur); const sc = scoreFn.current ? scoreFn.current(s, e) : {}; setClips(p => [...p, { ...sc, startTime: s, endTime: e, id: `m${Date.now()}`, isManual: true, notes: "", dur: Math.round(e - s) }]); setSel(clips.length); setDirty(true); };
+  const dragEdge = (idx, edge, t) => { setClips(p => { const u = [...p], c = { ...u[idx] }; if (edge === "start") c.startTime = Math.round(Math.min(t, c.endTime - 1)); else c.endTime = Math.round(Math.max(t, c.startTime + 1)); c.dur = Math.round(c.endTime - c.startTime); if (scoreFn.current) Object.assign(c, scoreFn.current(c.startTime, c.endTime)); u[idx] = c; return u; }); setDirty(true); };
+  const moveClip = (idx, ns, ne) => { setClips(p => { const u = [...p], c = { ...u[idx] }; c.startTime = Math.round(ns); c.endTime = Math.round(ne); c.dur = Math.round(c.endTime - c.startTime); if (scoreFn.current) Object.assign(c, scoreFn.current(ns, ne)); u[idx] = c; return u; }); setDirty(true); };
   const setClipDur = (idx, nd) => { setClips(p => { const u = [...p], c = { ...u[idx] }, d = analysis?.duration || 300; c.endTime = Math.min(d, c.startTime + nd); c.dur = Math.round(c.endTime - c.startTime); if (scoreFn.current) Object.assign(c, scoreFn.current(c.startTime, c.endTime)); u[idx] = c; return u; }); setDirty(true); };
   const updateNote = (idx, n) => { setClips(p => { const u = [...p]; u[idx] = { ...u[idx], notes: n }; return u; }); setDirty(true); };
   const delClip = idx => { setClips(p => p.filter((_, i) => i !== idx)); if (sel >= idx && sel > 0) setSel(sel - 1); setDirty(true); };
@@ -532,8 +534,8 @@ export default function App() {
     const sameSong = songId === activeSong;
     setActiveSong(songId);
     const s = await getSubmissions(songId);
-    let ai = await getAiClips(songId);
-    const leaderSaved = await getLeaderClips(songId);
+    let ai = (await getAiClips(songId)).map(roundClip);
+    const leaderSaved = (await getLeaderClips(songId)).map(roundClip);
     setSubs(s); setAiClips(ai); setConsensus(buildConsensus(s).map(c => norm59(c, song?.duration))); setPage("review");
     if (!sameSong) {
       setEnergy([]); abuf.current = null; actx.current = null;
@@ -543,7 +545,7 @@ export default function App() {
         // If no AI clips exist yet (album upload), generate them now
         if (res && ai.length === 0) {
           const analysis = analyzeAudio(abuf.current);
-          const topClips = analysis.topClips;
+          const topClips = analysis.topClips.map(roundClip);
           await saveAiClips(songId, topClips);
           // Also update song duration/bpm if missing
           if (!song.duration || song.duration === 0) {
@@ -646,7 +648,7 @@ export default function App() {
             // Save AI clips too since we already have the analysis
             const song = await createSong({ name: songName, duration, bpm, shareLink: "", albumId: activeAlbum, trackNumber: trackNum });
             await uploadAudio(uploadFile, song.id);
-            await saveAiClips(song.id, res.topClips);
+            await saveAiClips(song.id, res.topClips.map(roundClip));
             trackNum++;
             continue;
           } catch (ae) { console.error('Analysis error, uploading without:', ae); }

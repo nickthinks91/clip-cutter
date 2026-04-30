@@ -225,7 +225,7 @@ function Waveform({ energy, duration, clips, highlights, selClip, onSel, onCreat
 function AgreementBar({ count, total }) { const pct = total > 0 ? (count / total) * 100 : 0; const color = pct >= 70 ? "#44cc66" : pct >= 40 ? "#F5A623" : "#C73E3E"; return <div style={{ display: "flex", alignItems: "center", gap: 8 }}><div style={{ flex: 1, height: 6, background: "rgba(245,230,200,0.08)", borderRadius: 3, overflow: "hidden" }}><div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: 3 }} /></div><span style={{ fontSize: 11, fontWeight: 700, color, fontFamily: "Fredoka, sans-serif", minWidth: 40 }}>{count}/{total}</span></div>; }
 
 
-function ClipCard({ c, idx, sel, playing, playingClip, isModified, bs, onSel, onPlay, onExport, onDur, onNote, onAB, onRevert, onDel, editNote, setEditNote, ab, clips, consensusLabel }) {
+function ClipCard({ c, idx, sel, playing, playingClip, isModified, bs, onSel, onPlay, onExport, onDur, onNote, onAB, onRevert, onDel, editNote, setEditNote, ab, clips }) {
   const isSel = idx === sel;
   const isPlaying = playingClip === idx;
   return (
@@ -235,7 +235,7 @@ function ClipCard({ c, idx, sel, playing, playingClip, isModified, bs, onSel, on
         <div style={{ flex: 1 }}>
           <span style={{ fontSize: 11, fontWeight: 600 }}>{fmt(c.startTime)} → {fmt(c.endTime)}</span>
           <span style={{ fontSize: 9, color: "#9B8B73", marginLeft: 5 }}>({c.dur}s)</span>
-          {consensusLabel && <span style={{ fontSize: 8, color: "#44cc66", marginLeft: 6, fontFamily: "Fredoka, sans-serif", background: "rgba(68,204,102,0.12)", border: "1px solid rgba(68,204,102,0.25)", padding: "1px 6px", borderRadius: 10, letterSpacing: 0.5 }}>Matches {consensusLabel}</span>}
+
           {c.viralBoost && parseFloat(c.viralBoost) > 0.3 && <span style={{ fontSize: 7, color: "#F5A623", marginLeft: 5, fontFamily: "Fredoka, sans-serif", background: "rgba(245,166,35,0.1)", padding: "0 4px", borderRadius: 2 }}>🔥 VIRAL</span>}
           {isModified && <span style={{ fontSize: 8, color: "#D4941C", marginLeft: 5, fontFamily: "Fredoka, sans-serif" }}>● edited</span>}
           {c.notes && <span style={{ fontSize: 9, color: "#C73E3E", marginLeft: 6, fontStyle: "italic" }}>📝 {c.notes}</span>}
@@ -977,7 +977,7 @@ export default function App() {
                 {hasAudio && <button onClick={() => { if (playing && activeRange === `c${idx}`) stopPlay(); else playRange(c.startTime, c.endTime, `c${idx}`); }} style={{ width: 28, height: 28, borderRadius: "50%", background: playing && activeRange === `c${idx}` ? "linear-gradient(135deg,#C73E3E,#ff6644)" : "linear-gradient(135deg,#44cc66,#228844)", border: "none", color: "#fff", fontSize: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{playing && activeRange === `c${idx}` ? "■" : "▶"}</button>}
                 {hasAudio && <button onClick={() => expRange(c.startTime, c.endTime, `consensus${idx + 1}`)} style={{ ...bs(false), padding: "3px 8px", fontSize: 9, flexShrink: 0 }}>⬇</button>}
               </div>
-              <div style={{ paddingLeft: 26, fontSize: 10, color: "#555" }}>{c.picks.map((p, i) => <span key={i} style={{ marginRight: 10 }}>{p.member}: {fmt(p.startTime)}–{fmt(p.endTime)}</span>)}</div>
+              <div style={{ paddingLeft: 26, fontSize: 10, color: "#555" }}>{c.picks.map((p, i) => <span key={i} style={{ marginRight: 10 }}>{p.member}: {fmt(p.startTime)}–{fmt(p.endTime)}</span>)}{(() => { const lo = Math.min(...c.picks.map(p => p.startTime)), hi = Math.max(...c.picks.map(p => p.startTime)); return clips.filter(cl => !cl.isManual && cl.startTime >= lo && cl.startTime <= hi).map(cl => { const n = clips.indexOf(cl) + 1; return <span key={`ai-${n}`} style={{ marginRight: 10, color: "#F5A623" }}>AI #{n}: {fmt(cl.startTime)}–{fmt(cl.endTime)}</span>; }); })()}</div>
             </div>)}</div>
           </div>}
           {hasAudio && <div style={{ marginBottom: 20 }}>
@@ -991,7 +991,7 @@ export default function App() {
           </div>}
           {clips.length > 0 && <div style={{ marginBottom: 20 }}>
             <div style={{ display: "flex", gap: 5, marginBottom: 8, alignItems: "center" }}><div style={{ fontSize: 10, fontFamily: "Fredoka, sans-serif", color: "#F5A623", letterSpacing: 2 }}>YOUR CLIPS (AI + CUSTOM)</div><div style={{ marginLeft: "auto", display: "flex", gap: 5 }}><button onClick={handleSaveLeaderClips} style={{ ...bs(dirty), padding: "4px 12px", fontSize: 9, borderColor: dirty ? "rgba(68,204,102,0.4)" : undefined, color: dirty ? "#44cc66" : undefined }}>{dirty ? "● Save Clips" : "Saved"}</button>{hasAudio && <button onClick={expAll} style={{ ...bs(true), padding: "4px 12px", fontSize: 9 }}>⬇ Download All</button>}</div></div>
-            <div style={{ display: "grid", gap: 7 }}>{clips.map((c, idx) => { let bestLabel = null, bestDiff = Infinity; consensus.forEach((cons, ci) => { const minDiff = Math.min(...(cons.picks || []).map(p => Math.abs(c.startTime - p.startTime))); if (minDiff <= 3 && minDiff < bestDiff) { bestLabel = `C${ci + 1}`; bestDiff = minDiff; } }); return <ClipCard key={c.id || idx} c={c} idx={idx} sel={sel} playing={playing} playingClip={playingClipIdx} isModified={isModified(c)} bs={bs} onSel={setSel} onPlay={playClip} onExport={expClip} onDur={setClipDur} onNote={updateNote} onAB={startAB} onRevert={revertClip} onDel={delClip} editNote={editNote} setEditNote={setEditNote} ab={ab} clips={clips} consensusLabel={bestLabel} />; })}</div>
+            <div style={{ display: "grid", gap: 7 }}>{clips.map((c, idx) => { return <ClipCard key={c.id || idx} c={c} idx={idx} sel={sel} playing={playing} playingClip={playingClipIdx} isModified={isModified(c)} bs={bs} onSel={setSel} onPlay={playClip} onExport={expClip} onDur={setClipDur} onNote={updateNote} onAB={startAB} onRevert={revertClip} onDel={delClip} editNote={editNote} setEditNote={setEditNote} ab={ab} clips={clips} />; })}</div>
           </div>}
           <div style={{ fontSize: 10, fontFamily: "Fredoka, sans-serif", color: "#C73E3E", letterSpacing: 2, marginBottom: 8 }}>INDIVIDUAL SUBMISSIONS</div>
           {subs.length === 0 && <div style={{ color: "#555", fontSize: 12, padding: 20, textAlign: "center", border: "1px dashed rgba(245,230,200,0.06)", borderRadius: 8 }}>Waiting for team picks...</div>}

@@ -168,6 +168,8 @@ function buildConsensus(submissions, threshold = 5) {
   }).sort((a, b) => b.memberCount - a.memberCount);
 }
 
+const norm59 = (c, dur) => { const end = Math.min(c.startTime + 59, dur > 0 ? dur : c.startTime + 59); return { ...c, endTime: end, dur: Math.round(end - c.startTime) }; };
+
 /* ═══ WAV ═══ */
 function encodeWav(ab) {
   const nc = ab.numberOfChannels, sr = ab.sampleRate, ns = ab.length, bps = 2, ds = ns * nc * bps;
@@ -453,7 +455,7 @@ export default function App() {
       // Refresh songs list
       const allSongs = await getSongs(); setSongs(allSongs);
       setActiveSong(song.id); setAiClips(topClips);
-      setClips(topClips.map((c, i) => ({ ...c, id: `a${i}`, isManual: false, notes: "", dur: Math.round(c.endTime - c.startTime), origStart: c.startTime, origEnd: c.endTime })));
+      setClips(topClips.map((c, i) => { const n = norm59(c, res.duration); return { ...n, id: `a${i}`, isManual: false, notes: "", origStart: n.startTime, origEnd: n.endTime }; }));
       setSel(0); setDl({}); setZoom(null); setPage("analyze");
     } catch (e2) { console.error(e2); flash("Error uploading — try again"); }
     setAnalyzing(false);
@@ -532,7 +534,7 @@ export default function App() {
     const s = await getSubmissions(songId);
     let ai = await getAiClips(songId);
     const leaderSaved = await getLeaderClips(songId);
-    setSubs(s); setAiClips(ai); setConsensus(buildConsensus(s)); setPage("review");
+    setSubs(s); setAiClips(ai); setConsensus(buildConsensus(s).map(c => norm59(c, song?.duration))); setPage("review");
     if (!sameSong) {
       setEnergy([]); abuf.current = null; actx.current = null;
       setAnalysis(song ? { duration: song.duration, bpm: song.bpm } : null);
@@ -553,9 +555,9 @@ export default function App() {
       }
     }
     if (leaderSaved.length > 0) {
-      setClips(leaderSaved.map((c, i) => ({ ...c, id: `l${i}`, dur: Math.round(c.endTime - c.startTime), origStart: c.startTime, origEnd: c.endTime })));
+      setClips(leaderSaved.map((c, i) => { const n = norm59(c, song?.duration); return { ...n, id: `l${i}`, origStart: n.startTime, origEnd: n.endTime }; }));
     } else {
-      setClips(ai.map((c, i) => ({ ...c, id: `a${i}`, isManual: false, notes: "", dur: Math.round(c.endTime - c.startTime), origStart: c.startTime, origEnd: c.endTime })));
+      setClips(ai.map((c, i) => { const n = norm59(c, song?.duration); return { ...n, id: `a${i}`, isManual: false, notes: "", origStart: n.startTime, origEnd: n.endTime }; }));
     }
     setSel(0); setDl({}); setZoom(null); setDirty(false);
   };
@@ -577,7 +579,7 @@ export default function App() {
     }
   };
 
-  const refreshSubs = async () => { if (!activeSong) return; const s = await getSubmissions(activeSong); setSubs(s); setConsensus(buildConsensus(s)); flash("Refreshed!"); };
+  const refreshSubs = async () => { if (!activeSong) return; const s = await getSubmissions(activeSong); setSubs(s); setConsensus(buildConsensus(s).map(c => norm59(c, analysis?.duration))); flash("Refreshed!"); };
   const handleSaveLeaderClips = async () => { if (!activeSong) return; await saveLeaderClips(activeSong, clips); setDirty(false); flash("Clips saved!"); };
   const delSong = async id => { await dbDeleteSong(id); const allSongs = await getSongs(); setSongs(allSongs); if (activeAlbum) { const as = await getAlbumSongs(activeAlbum); setAlbumSongs(as); } };
 

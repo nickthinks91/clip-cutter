@@ -1,6 +1,6 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
-import { getSongs, createSong, deleteSong as dbDeleteSong, uploadAudio, getAudioUrl, saveAiClips, getAiClips, submitPicks as dbSubmitPicks, getSubmissions, subscribeToSubmissions, findViralMatch, getViralPatterns, getTopViralSounds, getViralPositionPatterns, getAlbums, createAlbum, updateAlbum, deleteAlbum, getAlbumSongs, getAlbumProgress, getAlbumAllProgress, updateSong } from "../lib/supabase";
+import { getSongs, createSong, deleteSong as dbDeleteSong, uploadAudio, getAudioUrl, saveAiClips, getAiClips, saveLeaderClips, getLeaderClips, submitPicks as dbSubmitPicks, getSubmissions, subscribeToSubmissions, findViralMatch, getViralPatterns, getTopViralSounds, getViralPositionPatterns, getAlbums, createAlbum, updateAlbum, deleteAlbum, getAlbumSongs, getAlbumProgress, getAlbumAllProgress, updateSong } from "../lib/supabase";
 
 /* ═══ AUDIO CONVERSION ═══ */
 // Convert any audio file to a browser-friendly WAV (16-bit 44.1kHz mono)
@@ -278,6 +278,7 @@ export default function App() {
   const [albumUploadProgress, setAlbumUploadProgress] = useState("");
   const [editingSongId, setEditingSongId] = useState(null);
   const [editingSongName, setEditingSongName] = useState("");
+  const [dirty, setDirty] = useState(false);
 
   // Load user from localStorage & songs from Supabase
   useEffect(() => {
@@ -458,13 +459,13 @@ export default function App() {
   };
 
   // Clip ops
-  const createClip = (st, et) => { const d = analysis?.duration || 300; let s = Math.max(0, st), e = et !== null ? Math.min(d, et) : Math.min(d, s + defDur); if (e - s < 2) e = Math.min(d, s + defDur); const sc = scoreFn.current ? scoreFn.current(s, e) : {}; setClips(p => [...p, { ...sc, startTime: s, endTime: e, id: `m${Date.now()}`, isManual: true, notes: "", dur: Math.round(e - s) }]); setSel(clips.length); };
-  const dragEdge = (idx, edge, t) => { setClips(p => { const u = [...p], c = { ...u[idx] }; if (edge === "start") c.startTime = Math.min(t, c.endTime - 1); else c.endTime = Math.max(t, c.startTime + 1); c.dur = Math.round(c.endTime - c.startTime); if (scoreFn.current) Object.assign(c, scoreFn.current(c.startTime, c.endTime)); u[idx] = c; return u; }); };
-  const moveClip = (idx, ns, ne) => { setClips(p => { const u = [...p], c = { ...u[idx] }; c.startTime = ns; c.endTime = ne; c.dur = Math.round(ne - ns); if (scoreFn.current) Object.assign(c, scoreFn.current(ns, ne)); u[idx] = c; return u; }); };
-  const setClipDur = (idx, nd) => { setClips(p => { const u = [...p], c = { ...u[idx] }, d = analysis?.duration || 300; c.endTime = Math.min(d, c.startTime + nd); c.dur = Math.round(c.endTime - c.startTime); if (scoreFn.current) Object.assign(c, scoreFn.current(c.startTime, c.endTime)); u[idx] = c; return u; }); };
-  const updateNote = (idx, n) => setClips(p => { const u = [...p]; u[idx] = { ...u[idx], notes: n }; return u; });
-  const delClip = idx => { setClips(p => p.filter((_, i) => i !== idx)); if (sel >= idx && sel > 0) setSel(sel - 1); };
-  const revertClip = idx => { setClips(p => { const u = [...p], c = { ...u[idx] }; if (c.origStart == null) return p; c.startTime = c.origStart; c.endTime = c.origEnd; c.dur = Math.round(c.endTime - c.startTime); if (scoreFn.current) Object.assign(c, scoreFn.current(c.startTime, c.endTime)); u[idx] = c; return u; }); };
+  const createClip = (st, et) => { const d = analysis?.duration || 300; let s = Math.max(0, st), e = et !== null ? Math.min(d, et) : Math.min(d, s + defDur); if (e - s < 2) e = Math.min(d, s + defDur); const sc = scoreFn.current ? scoreFn.current(s, e) : {}; setClips(p => [...p, { ...sc, startTime: s, endTime: e, id: `m${Date.now()}`, isManual: true, notes: "", dur: Math.round(e - s) }]); setSel(clips.length); setDirty(true); };
+  const dragEdge = (idx, edge, t) => { setClips(p => { const u = [...p], c = { ...u[idx] }; if (edge === "start") c.startTime = Math.min(t, c.endTime - 1); else c.endTime = Math.max(t, c.startTime + 1); c.dur = Math.round(c.endTime - c.startTime); if (scoreFn.current) Object.assign(c, scoreFn.current(c.startTime, c.endTime)); u[idx] = c; return u; }); setDirty(true); };
+  const moveClip = (idx, ns, ne) => { setClips(p => { const u = [...p], c = { ...u[idx] }; c.startTime = ns; c.endTime = ne; c.dur = Math.round(ne - ns); if (scoreFn.current) Object.assign(c, scoreFn.current(ns, ne)); u[idx] = c; return u; }); setDirty(true); };
+  const setClipDur = (idx, nd) => { setClips(p => { const u = [...p], c = { ...u[idx] }, d = analysis?.duration || 300; c.endTime = Math.min(d, c.startTime + nd); c.dur = Math.round(c.endTime - c.startTime); if (scoreFn.current) Object.assign(c, scoreFn.current(c.startTime, c.endTime)); u[idx] = c; return u; }); setDirty(true); };
+  const updateNote = (idx, n) => { setClips(p => { const u = [...p]; u[idx] = { ...u[idx], notes: n }; return u; }); setDirty(true); };
+  const delClip = idx => { setClips(p => p.filter((_, i) => i !== idx)); if (sel >= idx && sel > 0) setSel(sel - 1); setDirty(true); };
+  const revertClip = idx => { setClips(p => { const u = [...p], c = { ...u[idx] }; if (c.origStart == null) return p; c.startTime = c.origStart; c.endTime = c.origEnd; c.dur = Math.round(c.endTime - c.startTime); if (scoreFn.current) Object.assign(c, scoreFn.current(c.startTime, c.endTime)); u[idx] = c; return u; }); setDirty(true); };
   const isModified = c => !c.isManual && c.origStart != null && (Math.abs(c.startTime - c.origStart) > 0.5 || Math.abs(c.endTime - c.origEnd) > 0.5);
 
   // Playback
@@ -512,6 +513,7 @@ export default function App() {
     setActiveSong(songId);
     const s = await getSubmissions(songId);
     let ai = await getAiClips(songId);
+    const leaderSaved = await getLeaderClips(songId);
     setSubs(s); setAiClips(ai); setConsensus(buildConsensus(s)); setPage("review");
     if (!sameSong) {
       setEnergy([]); abuf.current = null; actx.current = null;
@@ -532,8 +534,12 @@ export default function App() {
         }
       }
     }
-    setClips(ai.map((c, i) => ({ ...c, id: `a${i}`, isManual: false, notes: "", dur: Math.round(c.endTime - c.startTime), origStart: c.startTime, origEnd: c.endTime })));
-    setSel(0); setDl({}); setZoom(null);
+    if (leaderSaved.length > 0) {
+      setClips(leaderSaved.map((c, i) => ({ ...c, id: `l${i}`, dur: Math.round(c.endTime - c.startTime), origStart: c.startTime, origEnd: c.endTime })));
+    } else {
+      setClips(ai.map((c, i) => ({ ...c, id: `a${i}`, isManual: false, notes: "", dur: Math.round(c.endTime - c.startTime), origStart: c.startTime, origEnd: c.endTime })));
+    }
+    setSel(0); setDl({}); setZoom(null); setDirty(false);
   };
 
   const loadSubmit = async songId => {
@@ -547,6 +553,7 @@ export default function App() {
   };
 
   const refreshSubs = async () => { if (!activeSong) return; const s = await getSubmissions(activeSong); setSubs(s); setConsensus(buildConsensus(s)); flash("Refreshed!"); };
+  const handleSaveLeaderClips = async () => { if (!activeSong) return; await saveLeaderClips(activeSong, clips); setDirty(false); flash("Clips saved!"); };
   const delSong = async id => { await dbDeleteSong(id); const allSongs = await getSongs(); setSongs(allSongs); if (activeAlbum) { const as = await getAlbumSongs(activeAlbum); setAlbumSongs(as); } };
 
   // ═══ ALBUM FUNCTIONS ═══
@@ -697,6 +704,12 @@ export default function App() {
       return unsub;
     }
   }, [page, activeSong]);
+
+  useEffect(() => {
+    const handler = e => { if (dirty && isLeader) { e.preventDefault(); e.returnValue = ''; } };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [dirty, isLeader]);
 
   const bs = active => ({ background: active ? "rgba(245,166,35,0.12)" : "rgba(245,230,200,0.04)", border: `1px solid ${active ? "rgba(245,166,35,0.3)" : "rgba(245,230,200,0.08)"}`, color: active ? "#F5A623" : "#9B8B73", padding: "5px 12px", borderRadius: 6, fontSize: 11, cursor: "pointer", fontFamily: "Fredoka, sans-serif", transition: "all 0.2s", letterSpacing: "0.5px" });
   const cs = active => ({ background: active ? "rgba(245,166,35,0.05)" : "rgba(245,230,200,0.015)", border: `1px solid ${active ? "rgba(245,166,35,0.2)" : "rgba(245,230,200,0.05)"}`, borderRadius: 9, padding: "12px 14px", cursor: "pointer", transition: "all 0.2s" });
@@ -948,7 +961,7 @@ export default function App() {
             <div style={{ display: "flex", gap: 4, marginTop: 2 }}><button onClick={() => setZoom(null)} style={{ ...bs(!zoom), padding: "2px 8px", fontSize: 8 }}>Full</button><button onClick={() => setShowIndiv(!showIndiv)} style={{ ...bs(showIndiv), padding: "2px 8px", fontSize: 8 }}>{showIndiv ? "Hide" : "Show"} Individual</button></div>
           </div>}
           {clips.length > 0 && <div style={{ marginBottom: 20 }}>
-            <div style={{ display: "flex", gap: 5, marginBottom: 8, alignItems: "center" }}><div style={{ fontSize: 10, fontFamily: "Fredoka, sans-serif", color: "#F5A623", letterSpacing: 2 }}>YOUR CLIPS (AI + CUSTOM)</div>{hasAudio && <div style={{ marginLeft: "auto" }}><button onClick={expAll} style={{ ...bs(true), padding: "4px 12px", fontSize: 9 }}>⬇ Download All</button></div>}</div>
+            <div style={{ display: "flex", gap: 5, marginBottom: 8, alignItems: "center" }}><div style={{ fontSize: 10, fontFamily: "Fredoka, sans-serif", color: "#F5A623", letterSpacing: 2 }}>YOUR CLIPS (AI + CUSTOM)</div><div style={{ marginLeft: "auto", display: "flex", gap: 5 }}><button onClick={handleSaveLeaderClips} style={{ ...bs(dirty), padding: "4px 12px", fontSize: 9, borderColor: dirty ? "rgba(68,204,102,0.4)" : undefined, color: dirty ? "#44cc66" : undefined }}>{dirty ? "● Save Clips" : "Saved"}</button>{hasAudio && <button onClick={expAll} style={{ ...bs(true), padding: "4px 12px", fontSize: 9 }}>⬇ Download All</button>}</div></div>
             <div style={{ display: "grid", gap: 7 }}>{clips.map((c, idx) => <ClipCard key={c.id || idx} c={c} idx={idx} sel={sel} playing={playing} isModified={isModified(c)} bs={bs} onSel={setSel} onPlay={playClip} onExport={expClip} onDur={setClipDur} onNote={updateNote} onAB={startAB} onRevert={revertClip} onDel={delClip} editNote={editNote} setEditNote={setEditNote} ab={ab} clips={clips} />)}</div>
           </div>}
           <div style={{ fontSize: 10, fontFamily: "Fredoka, sans-serif", color: "#C73E3E", letterSpacing: 2, marginBottom: 8 }}>INDIVIDUAL SUBMISSIONS</div>

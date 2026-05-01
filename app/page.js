@@ -532,6 +532,7 @@ export default function App() {
   const loadReview = async songId => {
     const song = songs.find(s => s.id === songId) || albumSongs.find(s => s.id === songId);
     const sameSong = songId === activeSong;
+    setClips([]); setConsensus([]); setSubs([]); setAiClips([]);
     setActiveSong(songId);
     const s = await getSubmissions(songId);
     let ai = (await getAiClips(songId)).map(roundClip);

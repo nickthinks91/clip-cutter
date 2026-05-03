@@ -286,6 +286,7 @@ export default function App() {
   const [playingFull, setPlayingFull] = useState(false), [fullProgress, setFullProgress] = useState(0);
   const [activeRange, setActiveRange] = useState(null);
   const [playingClipIdx, setPlayingClipIdx] = useState(null);
+  const [selectedPickByConsensus, setSelectedPickByConsensus] = useState({});
   const [playheadPos, setPlayheadPos] = useState(null);
   const [viralInfo, setViralInfo] = useState(null); // { matches, matchType, patterns, genre }
   const [selectedGenre, setSelectedGenre] = useState(null); // genre for viral intelligence
@@ -532,7 +533,7 @@ export default function App() {
   const loadReview = async songId => {
     const song = songs.find(s => s.id === songId) || albumSongs.find(s => s.id === songId);
     const sameSong = songId === activeSong;
-    setClips([]); setConsensus([]); setSubs([]); setAiClips([]);
+    setClips([]); setConsensus([]); setSubs([]); setAiClips([]); setSelectedPickByConsensus({});
     setActiveSong(songId);
     const s = await getSubmissions(songId);
     let ai = (await getAiClips(songId)).map(roundClip);
@@ -970,16 +971,16 @@ export default function App() {
           </div>
           {consensus.length > 0 && <div style={{ marginBottom: 24 }}>
             <div style={{ fontSize: 10, fontFamily: "Fredoka, sans-serif", color: "#44cc66", letterSpacing: 2, marginBottom: 8 }}>CONSENSUS CLIPS</div>
-            <div style={{ display: "grid", gap: 8 }}>{consensus.map((c, idx) => <div key={idx} style={{ ...cs(false), borderColor: "rgba(68,204,102,0.2)" }}>
+            <div style={{ display: "grid", gap: 8 }}>{consensus.map((c, idx) => { const selPick = selectedPickByConsensus[idx]; const playStart = selPick != null ? selPick.startTime : c.startTime; const playEnd = selPick != null ? selPick.endTime : c.endTime; return <div key={idx} style={{ ...cs(false), borderColor: "rgba(68,204,102,0.2)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
                 <div style={{ fontSize: 16, fontWeight: 800, color: "#44cc66" }}>C{idx + 1}</div>
                 <div style={{ flex: "1 1 150px", minWidth: 0 }}><div style={{ fontSize: 12, fontWeight: 600 }}>{fmt(c.startTime)} → {fmt(c.endTime)} <span style={{ color: "#9B8B73", fontWeight: 400 }}>({c.dur}s)</span></div><div style={{ fontSize: 10, color: "#9B8B73", marginTop: 2 }}>Picked by: {c.members.join(", ")}</div></div>
                 <div style={{ minWidth: 80 }}><AgreementBar count={c.memberCount} total={c.total} /></div>
-                {hasAudio && <button onClick={() => { if (playing && activeRange === `c${idx}`) stopPlay(); else playRange(c.startTime, c.endTime, `c${idx}`); }} style={{ width: 28, height: 28, borderRadius: "50%", background: playing && activeRange === `c${idx}` ? "linear-gradient(135deg,#C73E3E,#ff6644)" : "linear-gradient(135deg,#44cc66,#228844)", border: "none", color: "#fff", fontSize: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{playing && activeRange === `c${idx}` ? "■" : "▶"}</button>}
-                {hasAudio && <button onClick={() => expRange(c.startTime, c.endTime, `consensus${idx + 1}`)} style={{ ...bs(false), padding: "3px 8px", fontSize: 9, flexShrink: 0 }}>⬇</button>}
+                {hasAudio && <button onClick={() => { if (playing && activeRange === `c${idx}`) stopPlay(); else playRange(playStart, playEnd, `c${idx}`); }} style={{ width: 28, height: 28, borderRadius: "50%", background: playing && activeRange === `c${idx}` ? "linear-gradient(135deg,#C73E3E,#ff6644)" : "linear-gradient(135deg,#44cc66,#228844)", border: "none", color: "#fff", fontSize: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{playing && activeRange === `c${idx}` ? "■" : "▶"}</button>}
+                {hasAudio && <button onClick={() => expRange(playStart, playEnd, `consensus${idx + 1}`)} style={{ ...bs(false), padding: "3px 8px", fontSize: 9, flexShrink: 0 }}>⬇</button>}
               </div>
-              <div style={{ paddingLeft: 26, fontSize: 10, color: "#555" }}>{c.picks.map((p, i) => <span key={i} style={{ marginRight: 10 }}>{p.member}: {fmt(p.startTime)}–{fmt(p.endTime)}</span>)}{clips.filter(cl => !cl.isManual && c.picks.some(p => Math.abs(cl.startTime - p.startTime) <= 3)).map(cl => { const n = clips.indexOf(cl) + 1; return <span key={`ai-${n}`} style={{ marginRight: 10, color: "#F5A623" }}>AI #{n}: {fmt(cl.startTime)}–{fmt(cl.endTime)}</span>; })}</div>
-            </div>)}</div>
+              <div style={{ paddingLeft: 26, fontSize: 10, color: "#555" }}>{c.picks.map((p, i) => { const active = selPick != null && selPick.startTime === p.startTime && selPick.endTime === p.endTime; return <span key={i} onClick={() => setSelectedPickByConsensus(prev => ({ ...prev, [idx]: { startTime: p.startTime, endTime: p.endTime } }))} style={{ marginRight: 10, cursor: "pointer", fontWeight: active ? 700 : 400, background: active ? "rgba(68,204,102,0.15)" : "transparent", borderRadius: active ? 4 : 0, padding: active ? "1px 4px" : "1px 0", color: active ? "#44cc66" : "#555" }}>{p.member}: {fmt(p.startTime)}–{fmt(p.endTime)}</span>; })}{clips.filter(cl => !cl.isManual && c.picks.some(p => Math.abs(cl.startTime - p.startTime) <= 3)).map(cl => { const n = clips.indexOf(cl) + 1; const aiActive = selPick != null && selPick.startTime === cl.startTime && selPick.endTime === cl.endTime; return <span key={`ai-${n}`} onClick={() => setSelectedPickByConsensus(prev => ({ ...prev, [idx]: { startTime: cl.startTime, endTime: cl.endTime } }))} style={{ marginRight: 10, cursor: "pointer", fontWeight: aiActive ? 700 : 400, background: aiActive ? "rgba(245,166,35,0.2)" : "transparent", borderRadius: aiActive ? 4 : 0, padding: aiActive ? "1px 4px" : "1px 0", color: "#F5A623" }}>AI #{n}: {fmt(cl.startTime)}–{fmt(cl.endTime)}</span>; })}</div>
+            </div>; })}</div>
           </div>}
           {hasAudio && <div style={{ marginBottom: 20 }}>
             <Waveform energy={energy} duration={analysis.duration} clips={clips} highlights={[...consensus.map((c, i) => ({ startTime: c.startTime, endTime: c.endTime, color: "rgba(68,204,102,0.13)", label: `C${i + 1} (${c.memberCount}/${c.total})`, lc: "rgba(68,204,102,0.8)", bordered: true, topLabel: true })), ...(showIndiv ? subs.flatMap(s => (s.clips || []).map(c => ({ startTime: c.startTime, endTime: c.endTime, color: "rgba(199,62,62,0.04)", label: "" }))) : [])]} selClip={sel} onSel={setSel} onCreate={createClip} onEdge={dragEdge} onMove={moveClip} zoom={zoom || [0, analysis.duration]} onZoom={setZoom} readonly={false} onPlayFrom={t => { setLastTapTime(t); playFull(t); }} playheadTime={playheadTime} />

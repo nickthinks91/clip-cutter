@@ -225,12 +225,13 @@ function Waveform({ energy, duration, clips, highlights, selClip, onSel, onCreat
 function AgreementBar({ count, total }) { const pct = total > 0 ? (count / total) * 100 : 0; const color = pct >= 70 ? "#44cc66" : pct >= 40 ? "#F5A623" : "#C73E3E"; return <div style={{ display: "flex", alignItems: "center", gap: 8 }}><div style={{ flex: 1, height: 6, background: "rgba(245,230,200,0.08)", borderRadius: 3, overflow: "hidden" }}><div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: 3 }} /></div><span style={{ fontSize: 11, fontWeight: 700, color, fontFamily: "Fredoka, sans-serif", minWidth: 40 }}>{count}/{total}</span></div>; }
 
 
-function ClipCard({ c, idx, sel, playing, playingClip, isModified, bs, onSel, onPlay, onExport, onDur, onNote, onAB, onRevert, onDel, editNote, setEditNote, ab, clips }) {
+function ClipCard({ c, idx, sel, playing, playingClip, isModified, bs, onSel, onPlay, onExport, onDur, onNote, onAB, onRevert, onDel, editNote, setEditNote, ab, clips, selectionMode = false, isChecked = false, onToggle = null }) {
   const isSel = idx === sel;
   const isPlaying = playingClip === idx;
   return (
     <div onClick={() => onSel(idx)} style={{ background: isSel ? "rgba(245,166,35,0.035)" : "rgba(245,230,200,0.01)", border: `1px solid ${isSel ? "rgba(245,166,35,0.15)" : "rgba(245,230,200,0.035)"}`, borderRadius: 8, padding: "10px 12px", cursor: "pointer", transition: "all 0.2s" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+        {selectionMode && <input type="checkbox" checked={isChecked} onChange={e => { e.stopPropagation(); if (onToggle) onToggle(); }} onClick={e => e.stopPropagation()} style={{ cursor: "pointer", accentColor: "#44cc66", flexShrink: 0 }} />}
         <div style={{ fontSize: 14, fontWeight: 800, minWidth: 28, textAlign: "center", color: c.isManual ? "#F5A623" : idx === 0 ? "#F5A623" : idx === 1 ? "#C73E3E" : "#9B8B73" }}>{c.isManual ? "✎" : `#${idx + 1}`}</div>
         <div style={{ flex: 1 }}>
           <span style={{ fontSize: 11, fontWeight: 600 }}>{fmt(c.startTime)} → {fmt(c.endTime)}</span>
@@ -287,6 +288,8 @@ export default function App() {
   const [activeRange, setActiveRange] = useState(null);
   const [playingClipIdx, setPlayingClipIdx] = useState(null);
   const [selectedPickByConsensus, setSelectedPickByConsensus] = useState({});
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectionsBySong, setSelectionsBySong] = useState({});
   const [playheadPos, setPlayheadPos] = useState(null);
   const [viralInfo, setViralInfo] = useState(null); // { matches, matchType, patterns, genre }
   const [selectedGenre, setSelectedGenre] = useState(null); // genre for viral intelligence
@@ -525,6 +528,48 @@ export default function App() {
   const expClip = async idx => { setExpIdx(idx); const cl = clips[idx]; if (!abuf.current || !cl) { setExpIdx(null); return; } const expEnd = Math.min(cl.startTime + 59, abuf.current.duration); const sr = abuf.current.sampleRate, ns = Math.floor((expEnd - cl.startTime) * sr); const oc = new OfflineAudioContext(abuf.current.numberOfChannels, ns, sr); const s = oc.createBufferSource(); s.buffer = abuf.current; s.connect(oc.destination); s.start(0, cl.startTime, expEnd - cl.startTime); const r = await oc.startRendering(); const blob = encodeWav(r); const url = URL.createObjectURL(blob), a = document.createElement("a"); a.href = url; a.download = `${(activeSongData?.name || "clip").replace(/\.[^.]+$/, "")}_clip${idx + 1}_${fmt(cl.startTime)}-${fmt(expEnd)}.wav`; a.click(); URL.revokeObjectURL(url); setDl(p => ({ ...p, [idx]: true })); setExpIdx(null); };
   const expAll = async () => { for (let i = 0; i < clips.length; i++) { await expClip(i); await new Promise(r => setTimeout(r, 400)); } };
   const expRange = async (st, et, label) => { if (!abuf.current) return; const expEnd = Math.min(st + 59, abuf.current.duration); const sr = abuf.current.sampleRate, ns = Math.floor((expEnd - st) * sr); const oc = new OfflineAudioContext(abuf.current.numberOfChannels, ns, sr); const s = oc.createBufferSource(); s.buffer = abuf.current; s.connect(oc.destination); s.start(0, st, expEnd - st); const r = await oc.startRendering(); const blob = encodeWav(r); const url = URL.createObjectURL(blob), a = document.createElement("a"); a.href = url; a.download = `${(activeSongData?.name || "clip").replace(/\.[^.]+$/, "")}_${label}.wav`; a.click(); URL.revokeObjectURL(url); };
+
+  // Selection helpers
+  const toggleClipSel = (songId, key, data) => setSelectionsBySong(prev => { const cur = { ...(prev[songId] || {}) }; if (cur[key]) delete cur[key]; else cur[key] = data; return { ...prev, [songId]: cur }; });
+  const isSel = (songId, key) => !!(selectionsBySong[songId]?.[key]);
+  const songSelCount = (songId) => Object.keys(selectionsBySong[songId] || {}).length;
+
+  const exportSelected = async () => {
+    const sels = selectionsBySong[activeSong] || {};
+    const entries = Object.values(sels).sort((a, b) => a.startTime - b.startTime);
+    if (!entries.length) return;
+    const songBase = (activeSongData?.name || "song").replace(/\.[^.]+$/, "");
+    for (const e of entries) { await expRange(e.startTime, e.startTime, e.label); await new Promise(r => setTimeout(r, 300)); }
+    const text = `${songBase}\n\n${entries.map(e => `${fmt(e.startTime)} - “”`).join("\n")}`;
+    const b = new Blob([text], { type: "text/plain" }); const u = URL.createObjectURL(b);
+    const a = document.createElement("a"); a.href = u; a.download = `${songBase}_timestamps.txt`; a.click(); URL.revokeObjectURL(u);
+  };
+
+  const exportAllSongsSelected = async () => {
+    const sections = [];
+    for (const song of albumSongs) {
+      const sels = selectionsBySong[song.id] || {};
+      const entries = Object.values(sels).sort((a, b) => a.startTime - b.startTime);
+      if (!entries.length) continue;
+      const songBase = song.name.replace(/\.[^.]+$/, "");
+      if (song.audio_path) {
+        try {
+          const audioUrl = getAudioUrl(song.audio_path);
+          const resp = await fetch(audioUrl); const ab = await resp.arrayBuffer();
+          const ctx = new (window.AudioContext || window.webkitAudioContext)();
+          let buf; try { buf = await ctx.decodeAudioData(ab.slice(0)); } catch { buf = await manualWavDecode(ab, ctx); }
+          if (buf) { for (const e of entries) { const expEnd = Math.min(e.startTime + 59, buf.duration); const sr = buf.sampleRate, ns = Math.floor((expEnd - e.startTime) * sr); const oc = new OfflineAudioContext(buf.numberOfChannels, ns, sr); const s = oc.createBufferSource(); s.buffer = buf; s.connect(oc.destination); s.start(0, e.startTime, expEnd - e.startTime); const r = await oc.startRendering(); const wavBlob = encodeWav(r); const wu = URL.createObjectURL(wavBlob); const wa = document.createElement("a"); wa.href = wu; wa.download = `${songBase}_${e.label}.wav`; wa.click(); URL.revokeObjectURL(wu); await new Promise(r => setTimeout(r, 300)); } }
+          try { await ctx.close(); } catch {}
+        } catch (err) { console.error(err); }
+      }
+      sections.push(`${songBase}\n${entries.map(e => `${fmt(e.startTime)} - “”`).join("\n")}`);
+    }
+    if (!sections.length) return;
+    const albumBase = (albums.find(a => a.id === activeAlbum)?.name || "album").replace(/\.[^.]+$/, "");
+    const text = sections.join("\n\n");
+    const b = new Blob([text], { type: "text/plain" }); const u = URL.createObjectURL(b);
+    const a = document.createElement("a"); a.href = u; a.download = `${albumBase}_timestamps.txt`; a.click(); URL.revokeObjectURL(u);
+  };
 
   // Team
   const submitMyPicks = async () => { if (!activeSong || clips.length < 2) return; await dbSubmitPicks(activeSong, user.name, clips.map(c => ({ startTime: c.startTime, endTime: c.endTime, notes: c.notes || "", dur: c.dur }))); setSubmitted(true); flash("Picks submitted!"); };
@@ -875,6 +920,7 @@ export default function App() {
             </div>}
 
             {/* Song list */}
+            {isLeader && albumSongs.some(s => songSelCount(s.id) > 0) && <div style={{ marginBottom: 12 }}><button onClick={exportAllSongsSelected} style={{ ...bs(true), padding: "6px 14px", fontSize: 10, borderColor: "rgba(68,204,102,0.4)", color: "#44cc66" }}>⬇ Export Selected (All Songs)</button></div>}
             <div style={{ fontSize: 9, fontFamily: "Fredoka, sans-serif", color: "#555", marginBottom: 8, letterSpacing: 1 }}>TRACKLIST</div>
             {albumSongs.length === 0 && <div style={{ textAlign: "center", padding: 30, border: "1px dashed rgba(245,230,200,0.06)", borderRadius: 8 }}><div style={{ color: "#555", fontSize: 12 }}>No songs yet — upload audio files above</div></div>}
             <div style={{ display: "grid", gap: 6 }}>{albumSongs.map((song, idx) => {
@@ -967,7 +1013,11 @@ export default function App() {
           </div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
             <div><h2 style={{ fontSize: 17, fontWeight: 700, marginBottom: 2 }}>Team Review — {activeSongData?.name}</h2><p style={{ color: "#9B8B73", fontSize: 11, margin: 0 }}>{subs.length} submission{subs.length !== 1 ? "s" : ""} · updates live</p></div>
-            <button onClick={refreshSubs} style={bs(false)}>↻ Refresh</button>
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              {songSelCount(activeSong) > 0 && <button onClick={exportSelected} style={{ ...bs(true), padding: "4px 12px", fontSize: 9, borderColor: "rgba(68,204,102,0.4)", color: "#44cc66" }}>⬇ Export Selected ({songSelCount(activeSong)})</button>}
+              <button onClick={() => setSelectionMode(m => !m)} style={{ ...bs(selectionMode), padding: "4px 12px", fontSize: 9 }}>{selectionMode ? "✓ Selecting" : "Select"}</button>
+              <button onClick={refreshSubs} style={bs(false)}>↻ Refresh</button>
+            </div>
           </div>
           {consensus.length > 0 && <div style={{ marginBottom: 24 }}>
             <div style={{ fontSize: 10, fontFamily: "Fredoka, sans-serif", color: "#44cc66", letterSpacing: 2, marginBottom: 8 }}>CONSENSUS CLIPS</div>
@@ -979,7 +1029,7 @@ export default function App() {
                 {hasAudio && <button onClick={() => { if (playing && activeRange === `c${idx}`) stopPlay(); else playRange(playStart, Math.min(playStart + 59, analysis?.duration || abuf.current?.duration), `c${idx}`); }} style={{ width: 28, height: 28, borderRadius: "50%", background: playing && activeRange === `c${idx}` ? "linear-gradient(135deg,#C73E3E,#ff6644)" : "linear-gradient(135deg,#44cc66,#228844)", border: "none", color: "#fff", fontSize: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{playing && activeRange === `c${idx}` ? "■" : "▶"}</button>}
                 {hasAudio && <button onClick={() => expRange(playStart, playEnd, `consensus${idx + 1}`)} style={{ ...bs(false), padding: "3px 8px", fontSize: 9, flexShrink: 0 }}>⬇</button>}
               </div>
-              <div style={{ paddingLeft: 26, fontSize: 10, color: "#555" }}>{c.picks.map((p, i) => { const active = selPick != null && selPick.startTime === p.startTime && selPick.endTime === p.endTime; return <span key={i} onClick={() => setSelectedPickByConsensus(prev => ({ ...prev, [idx]: { startTime: p.startTime, endTime: p.endTime } }))} style={{ marginRight: 10, cursor: "pointer", fontWeight: active ? 700 : 400, background: active ? "rgba(68,204,102,0.15)" : "transparent", borderRadius: active ? 4 : 0, padding: active ? "1px 4px" : "1px 0", color: active ? "#44cc66" : "#555" }}>{p.member}: {fmt(p.startTime)}–{fmt(p.endTime)}</span>; })}{clips.filter(cl => !cl.isManual && c.picks.some(p => Math.abs(cl.startTime - p.startTime) <= 3)).map(cl => { const n = clips.indexOf(cl) + 1; const aiActive = selPick != null && selPick.startTime === cl.startTime && selPick.endTime === cl.endTime; return <span key={`ai-${n}`} onClick={() => setSelectedPickByConsensus(prev => ({ ...prev, [idx]: { startTime: cl.startTime, endTime: cl.endTime } }))} style={{ marginRight: 10, cursor: "pointer", fontWeight: aiActive ? 700 : 400, background: aiActive ? "rgba(245,166,35,0.2)" : "transparent", borderRadius: aiActive ? 4 : 0, padding: aiActive ? "1px 4px" : "1px 0", color: "#F5A623" }}>AI #{n}: {fmt(cl.startTime)}–{fmt(cl.endTime)}</span>; })}</div>
+              <div style={{ paddingLeft: 26, fontSize: 10, color: "#555", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "2px 0" }}>{c.picks.map((p, i) => { const active = selPick != null && selPick.startTime === p.startTime && selPick.endTime === p.endTime; const pk = `cp-${idx}-${p.member}-${p.startTime}`; return <span key={i} style={{ display: "inline-flex", alignItems: "center", marginRight: 10 }}>{selectionMode && <input type="checkbox" checked={isSel(activeSong, pk)} onChange={e => { e.stopPropagation(); toggleClipSel(activeSong, pk, { startTime: p.startTime, endTime: p.endTime, label: `${p.member}-pick` }); }} onClick={e => e.stopPropagation()} style={{ cursor: "pointer", accentColor: "#44cc66", marginRight: 4 }} />}<span onClick={() => setSelectedPickByConsensus(prev => ({ ...prev, [idx]: { startTime: p.startTime, endTime: p.endTime } }))} style={{ cursor: "pointer", fontWeight: active ? 700 : 400, background: active ? "rgba(68,204,102,0.15)" : "transparent", borderRadius: active ? 4 : 0, padding: active ? "1px 4px" : "1px 0", color: active ? "#44cc66" : "#555" }}>{p.member}: {fmt(p.startTime)}–{fmt(p.endTime)}</span></span>; })}{clips.filter(cl => !cl.isManual && c.picks.some(p => Math.abs(cl.startTime - p.startTime) <= 3)).map(cl => { const n = clips.indexOf(cl) + 1; const aiActive = selPick != null && selPick.startTime === cl.startTime && selPick.endTime === cl.endTime; const ak = `ca-${idx}-${n}-${cl.startTime}`; return <span key={`ai-${n}`} style={{ display: "inline-flex", alignItems: "center", marginRight: 10 }}>{selectionMode && <input type="checkbox" checked={isSel(activeSong, ak)} onChange={e => { e.stopPropagation(); toggleClipSel(activeSong, ak, { startTime: cl.startTime, endTime: cl.endTime, label: `ai${n}` }); }} onClick={e => e.stopPropagation()} style={{ cursor: "pointer", accentColor: "#F5A623", marginRight: 4 }} />}<span onClick={() => setSelectedPickByConsensus(prev => ({ ...prev, [idx]: { startTime: cl.startTime, endTime: cl.endTime } }))} style={{ cursor: "pointer", fontWeight: aiActive ? 700 : 400, background: aiActive ? "rgba(245,166,35,0.2)" : "transparent", borderRadius: aiActive ? 4 : 0, padding: aiActive ? "1px 4px" : "1px 0", color: "#F5A623" }}>AI #{n}: {fmt(cl.startTime)}–{fmt(cl.endTime)}</span></span>; })}</div>
             </div>; })}</div>
           </div>}
           {hasAudio && <div style={{ marginBottom: 20 }}>
@@ -993,13 +1043,13 @@ export default function App() {
           </div>}
           {clips.length > 0 && <div style={{ marginBottom: 20 }}>
             <div style={{ display: "flex", gap: 5, marginBottom: 8, alignItems: "center" }}><div style={{ fontSize: 10, fontFamily: "Fredoka, sans-serif", color: "#F5A623", letterSpacing: 2 }}>YOUR CLIPS (AI + CUSTOM)</div><div style={{ marginLeft: "auto", display: "flex", gap: 5 }}><button onClick={handleSaveLeaderClips} style={{ ...bs(dirty), padding: "4px 12px", fontSize: 9, borderColor: dirty ? "rgba(68,204,102,0.4)" : undefined, color: dirty ? "#44cc66" : undefined }}>{dirty ? "● Save Clips" : "Saved"}</button>{hasAudio && <button onClick={expAll} style={{ ...bs(true), padding: "4px 12px", fontSize: 9 }}>⬇ Download All</button>}</div></div>
-            <div style={{ display: "grid", gap: 7 }}>{clips.map((c, idx) => { return <ClipCard key={c.id || idx} c={c} idx={idx} sel={sel} playing={playing} playingClip={playingClipIdx} isModified={isModified(c)} bs={bs} onSel={setSel} onPlay={playClip} onExport={expClip} onDur={setClipDur} onNote={updateNote} onAB={startAB} onRevert={revertClip} onDel={delClip} editNote={editNote} setEditNote={setEditNote} ab={ab} clips={clips} />; })}</div>
+            <div style={{ display: "grid", gap: 7 }}>{clips.map((c, idx) => { const ck = `cl-${c.startTime}`; return <ClipCard key={c.id || idx} c={c} idx={idx} sel={sel} playing={playing} playingClip={playingClipIdx} isModified={isModified(c)} bs={bs} onSel={setSel} onPlay={playClip} onExport={expClip} onDur={setClipDur} onNote={updateNote} onAB={startAB} onRevert={revertClip} onDel={delClip} editNote={editNote} setEditNote={setEditNote} ab={ab} clips={clips} selectionMode={selectionMode} isChecked={isSel(activeSong, ck)} onToggle={() => toggleClipSel(activeSong, ck, { startTime: c.startTime, endTime: c.endTime, label: `clip${idx + 1}` })} />; })}</div>
           </div>}
           <div style={{ fontSize: 10, fontFamily: "Fredoka, sans-serif", color: "#C73E3E", letterSpacing: 2, marginBottom: 8 }}>INDIVIDUAL SUBMISSIONS</div>
           {subs.length === 0 && <div style={{ color: "#555", fontSize: 12, padding: 20, textAlign: "center", border: "1px dashed rgba(245,230,200,0.06)", borderRadius: 8 }}>Waiting for team picks...</div>}
           <div style={{ display: "grid", gap: 8 }}>{subs.map((sub, si) => <div key={si} style={{ ...cs(false) }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}><div style={{ width: 28, height: 28, borderRadius: "50%", background: "linear-gradient(135deg,rgba(199,62,62,0.2),rgba(245,166,35,0.1))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#C73E3E" }}>{sub.member.charAt(0).toUpperCase()}</div><div style={{ fontWeight: 600, fontSize: 12 }}>{sub.member}</div><div style={{ fontSize: 9, color: "#555", fontFamily: "Fredoka, sans-serif", marginLeft: "auto" }}>{sub.clips.length} clips</div></div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", paddingLeft: 36 }}>{(sub.clips || []).map((c, ci) => { const rk = `sub-${si}-${ci}`; const isActive = playing && activeRange === rk; return <div key={ci} style={{ display: "flex", alignItems: "center", gap: 2 }}><div onClick={() => { if (!hasAudio) return; isActive ? stopPlay() : playRange(c.startTime, c.endTime, rk); }} style={{ background: isActive ? "linear-gradient(135deg,rgba(199,62,62,0.25),rgba(255,102,68,0.15))" : "rgba(245,230,200,0.03)", border: `1px solid ${isActive ? "rgba(199,62,62,0.4)" : "rgba(245,230,200,0.06)"}`, borderRadius: 6, padding: "4px 10px", fontSize: 10, fontFamily: "Fredoka, sans-serif", color: isActive ? "#ff6644" : "#aaa", cursor: hasAudio ? "pointer" : "default" }}>{hasAudio && <span style={{ marginRight: 4 }}>{isActive ? "■" : "▶"}</span>}{fmt(c.startTime)}–{fmt(c.endTime)} ({c.dur}s)</div>{hasAudio && <button onClick={e => { e.stopPropagation(); expRange(c.startTime, c.endTime, `${sub.member}-clip${ci + 1}`); }} style={{ background: "none", border: "1px solid rgba(245,230,200,0.08)", borderRadius: 4, color: "#555", fontSize: 9, cursor: "pointer", padding: "3px 5px", lineHeight: 1, flexShrink: 0 }}>⬇</button>}</div>; })}</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", paddingLeft: 36 }}>{(sub.clips || []).map((c, ci) => { const rk = `sub-${si}-${ci}`; const sk = `sb-${si}-${ci}-${c.startTime}`; const isActive = playing && activeRange === rk; return <div key={ci} style={{ display: "flex", alignItems: "center", gap: 2 }}>{selectionMode && <input type="checkbox" checked={isSel(activeSong, sk)} onChange={e => { e.stopPropagation(); toggleClipSel(activeSong, sk, { startTime: c.startTime, endTime: c.endTime, label: `${sub.member}-pick${ci + 1}` }); }} onClick={e => e.stopPropagation()} style={{ cursor: "pointer", accentColor: "#C73E3E" }} />}<div onClick={() => { if (!hasAudio) return; isActive ? stopPlay() : playRange(c.startTime, c.endTime, rk); }} style={{ background: isActive ? "linear-gradient(135deg,rgba(199,62,62,0.25),rgba(255,102,68,0.15))" : "rgba(245,230,200,0.03)", border: `1px solid ${isActive ? "rgba(199,62,62,0.4)" : "rgba(245,230,200,0.06)"}`, borderRadius: 6, padding: "4px 10px", fontSize: 10, fontFamily: "Fredoka, sans-serif", color: isActive ? "#ff6644" : "#aaa", cursor: hasAudio ? "pointer" : "default" }}>{hasAudio && <span style={{ marginRight: 4 }}>{isActive ? "■" : "▶"}</span>}{fmt(c.startTime)}–{fmt(c.endTime)} ({c.dur}s)</div>{hasAudio && <button onClick={e => { e.stopPropagation(); expRange(c.startTime, c.endTime, `${sub.member}-clip${ci + 1}`); }} style={{ background: "none", border: "1px solid rgba(245,230,200,0.08)", borderRadius: 4, color: "#555", fontSize: 9, cursor: "pointer", padding: "3px 5px", lineHeight: 1, flexShrink: 0 }}>⬇</button>}</div>; })}</div>
           </div>)}</div>
         </div>}
 

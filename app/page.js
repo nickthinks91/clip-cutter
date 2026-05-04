@@ -308,6 +308,7 @@ export default function App() {
   const [editingSongName, setEditingSongName] = useState("");
   const [replaceAudioTarget, setReplaceAudioTarget] = useState(null);
   const [replaceStatus, setReplaceStatus] = useState({});
+  const [bulkReplaceLog, setBulkReplaceLog] = useState([]);
   const [dirty, setDirty] = useState(false);
 
   // Load user from localStorage & songs from Supabase
@@ -746,6 +747,7 @@ export default function App() {
     if (!file) return;
     setAlbumUploading(true);
     setAlbumUploadProgress("Extracting zip...");
+    setBulkReplaceLog([]);
     try {
       const JSZip = (await import('jszip')).default;
       const zip = await JSZip.loadAsync(await file.arrayBuffer());
@@ -764,7 +766,7 @@ export default function App() {
         const songName = name.replace(/\.[^.]+$/, '');
         const converted = await convertToWebAudio(af);
         const uploadFile = converted ? new File([converted.blob], songName + '.wav', { type: 'audio/wav' }) : af;
-        console.log('[BulkReplace]', name, '| converted:', converted ? `ok (${converted.buffer?.numberOfChannels}ch)` : 'null (raw fallback)', '| uploadFile:', uploadFile.name, uploadFile.type, uploadFile.size, 'bytes');
+        setBulkReplaceLog(prev => [...prev, `${name} → ${converted ? `converted ok (${converted.buffer?.numberOfChannels}ch)` : 'raw fallback'} | ${uploadFile.name} ${uploadFile.type} ${(uploadFile.size / 1024).toFixed(0)}KB`]);
         await uploadAudio(uploadFile, song.id);
         replaced++;
       }
@@ -981,6 +983,7 @@ export default function App() {
                 <div style={{ width: 30, height: 30, border: "3px solid rgba(199,62,62,0.12)", borderTop: "3px solid #C73E3E", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 8px" }} />
                 <div style={{ fontSize: 11, color: "#C73E3E", fontFamily: "Fredoka, sans-serif" }}>{albumUploadProgress}</div>
               </div>}
+              {bulkReplaceLog.length > 0 && <div style={{ marginTop: 8, maxHeight: 160, overflowY: "auto", background: "rgba(0,0,0,0.3)", border: "1px solid rgba(245,230,200,0.07)", borderRadius: 6, padding: "6px 8px" }}>{bulkReplaceLog.map((line, i) => <div key={i} style={{ fontFamily: "monospace", fontSize: 9, color: "#9B8B73", lineHeight: 1.6, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>{line}</div>)}</div>}
             </div>}
 
             {/* Song list */}

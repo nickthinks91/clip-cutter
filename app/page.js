@@ -779,7 +779,15 @@ export default function App() {
         const songName = name.replace(/\.[^.]+$/, '');
         const converted = await convertToWebAudio(af);
         const uploadFile = converted ? new File([converted.blob], songName + '.wav', { type: 'audio/wav' }) : af;
-        setBulkReplaceLog(prev => [...prev, `${name} → ${converted ? `converted ok (${converted.buffer?.numberOfChannels}ch)` : 'raw fallback'} | ${uploadFile.name} ${uploadFile.type} ${(uploadFile.size / 1024).toFixed(0)}KB`]);
+        let blobHeader = '?';
+        try {
+          const hb = await uploadFile.slice(0, 44).arrayBuffer();
+          const hv = new DataView(hb);
+          const tag = String.fromCharCode(hv.getUint8(0),hv.getUint8(1),hv.getUint8(2),hv.getUint8(3));
+          if (tag === 'RIFF') { blobHeader = `WAV ${hv.getUint16(22,true)}ch ${hv.getUint32(24,true)}Hz`; }
+          else { blobHeader = `non-WAV (${tag})`; }
+        } catch {}
+        setBulkReplaceLog(prev => [...prev, `${name} → ${converted ? `converted ok (${converted.buffer?.numberOfChannels}ch)` : 'raw fallback'} | upload blob: ${blobHeader} ${(uploadFile.size/1024).toFixed(0)}KB`]);
         await uploadAudio(uploadFile, song.id);
         replaced++;
       }

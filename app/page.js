@@ -972,9 +972,9 @@ export default function App() {
                 <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2 }}>Add songs to album</div>
                 <div style={{ fontSize: 9, color: "#9B8B73" }}>Select multiple files, or drop a .zip · MP3, WAV, M4A, AAC, OGG, FLAC</div>
                 <input id="fi-album" type="file" accept="audio/*,.zip" multiple onChange={handleAlbumUpload} style={{ display: "none" }} />
-                <input id="fi-replace-audio" type="file" accept="audio/*" onChange={e => { const f = e.target.files?.[0]; if (f && replaceAudioTarget) handleReplaceAudio(replaceAudioTarget, f); e.target.value = ""; }} style={{ display: "none" }} />
-                <input id="fi-replace-zip" type="file" accept=".zip" onChange={e => { const f = e.target.files?.[0]; if (f) handleBulkReplaceFromZip(f); e.target.value = ""; }} style={{ display: "none" }} />
               </div>
+              <input id="fi-replace-audio" type="file" accept="audio/*" onClick={e => e.stopPropagation()} onChange={e => { const f = e.target.files?.[0]; if (f && replaceAudioTarget) handleReplaceAudio(replaceAudioTarget, f); e.target.value = ""; }} style={{ display: "none" }} />
+              <input id="fi-replace-zip" type="file" accept=".zip" onClick={e => e.stopPropagation()} onChange={e => { const f = e.target.files?.[0]; if (f) handleBulkReplaceFromZip(f); e.target.value = ""; }} style={{ display: "none" }} />
               {albumSongs.length > 0 && !albumUploading && <button onClick={e => { e.stopPropagation(); document.getElementById("fi-replace-zip").click(); }} style={{ ...bs(false), fontSize: 9, marginTop: 8, width: "100%" }}>↻ Replace all audio (album zip)</button>}
               {albumUploading && <div style={{ textAlign: "center", padding: 12, marginTop: 8 }}>
                 <div style={{ width: 30, height: 30, border: "3px solid rgba(199,62,62,0.12)", borderTop: "3px solid #C73E3E", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 8px" }} />

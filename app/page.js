@@ -285,6 +285,7 @@ export default function App() {
   const [notice, setNotice] = useState(null);
   const [shareLink, setShareLink] = useState(""), [linkSongName, setLinkSongName] = useState("");
   const [audioLoading, setAudioLoading] = useState(false);
+  const [audioBufInfo, setAudioBufInfo] = useState(null);
   const [lastTapTime, setLastTapTime] = useState(0);
   const [playingFull, setPlayingFull] = useState(false), [fullProgress, setFullProgress] = useState(0);
   const [activeRange, setActiveRange] = useState(null);
@@ -340,7 +341,7 @@ export default function App() {
       }
       if (!buf) throw new Error('Could not decode audio');
       abuf.current = buf;
-      console.log("AUDIO LOADED:", abuf.current.numberOfChannels, abuf.current.sampleRate, abuf.current.duration);
+      setAudioBufInfo({ channels: buf.numberOfChannels, sampleRate: buf.sampleRate });
       const res = analyzeAudio(buf); setAnalysis(res); setEnergy(res.energy); scoreFn.current = res.scoreClip;
       return res;
     } catch (e) { console.error(e); flash("Error loading audio"); return null; }
@@ -1078,7 +1079,7 @@ export default function App() {
             </div>; })()}
           </div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
-            <div><h2 style={{ fontSize: 17, fontWeight: 700, marginBottom: 2 }}>Team Review — {activeSongData?.name}</h2><p style={{ color: "#9B8B73", fontSize: 11, margin: 0 }}>{subs.length} submission{subs.length !== 1 ? "s" : ""} · updates live</p></div>
+            <div><h2 style={{ fontSize: 17, fontWeight: 700, marginBottom: 2 }}>Team Review — {activeSongData?.name}</h2><p style={{ color: "#9B8B73", fontSize: 11, margin: 0 }}>{subs.length} submission{subs.length !== 1 ? "s" : ""} · updates live</p>{audioBufInfo && <p style={{ color: "#555", fontSize: 9, margin: "3px 0 0", fontFamily: "Fredoka, sans-serif", letterSpacing: 0.5 }}>Channels: {audioBufInfo.channels} | Sample rate: {audioBufInfo.sampleRate} Hz</p>}</div>
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
               {songSelCount(activeSong) > 0 && <button onClick={exportSelected} style={{ ...bs(true), padding: "4px 12px", fontSize: 9, borderColor: "rgba(68,204,102,0.4)", color: "#44cc66" }}>⬇ Export Selected ({songSelCount(activeSong)})</button>}
               <button onClick={() => setSelectionMode(m => !m)} style={{ ...bs(selectionMode), padding: "4px 12px", fontSize: 9 }}>{selectionMode ? "✓ Selecting" : "Select"}</button>

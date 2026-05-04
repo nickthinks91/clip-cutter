@@ -340,6 +340,7 @@ export default function App() {
       }
       if (!buf) throw new Error('Could not decode audio');
       abuf.current = buf;
+      console.log("AUDIO LOADED:", abuf.current.numberOfChannels, abuf.current.sampleRate, abuf.current.duration);
       const res = analyzeAudio(buf); setAnalysis(res); setEnergy(res.energy); scoreFn.current = res.scoreClip;
       return res;
     } catch (e) { console.error(e); flash("Error loading audio"); return null; }

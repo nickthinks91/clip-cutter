@@ -19,7 +19,7 @@ async function convertToWebAudio(file) {
     if (!buf) { ctx.close(); return null; }
     // Re-encode as 16-bit 44.1kHz WAV
     const numSamples = Math.floor(buf.duration * 44100);
-    const offCtx = new OfflineAudioContext(1, numSamples, 44100);
+    const offCtx = new OfflineAudioContext(buf.numberOfChannels, numSamples, 44100);
     const src = offCtx.createBufferSource();
     src.buffer = buf;
     src.connect(offCtx.destination);
@@ -67,30 +67,32 @@ async function manualWavDecode(arrayBuffer, ctx) {
   
   const bytesPerSample = bitsPerSample / 8;
   const numSamples = Math.floor(dataSize / (bytesPerSample * channels));
-  const buffer = ctx.createBuffer(1, numSamples, sampleRate);
-  const output = buffer.getChannelData(0);
-  
-  for (let i = 0; i < numSamples; i++) {
-    const bytePos = dataOffset + i * bytesPerSample * channels;
-    if (bytePos + bytesPerSample > view.byteLength) break;
-    
-    let sample = 0;
-    if (bitsPerSample === 24) {
-      // 24-bit signed integer
-      const b0 = view.getUint8(bytePos);
-      const b1 = view.getUint8(bytePos + 1);
-      const b2 = view.getUint8(bytePos + 2);
-      sample = ((b2 << 16) | (b1 << 8) | b0);
-      if (sample >= 0x800000) sample -= 0x1000000;
-      sample /= 0x800000;
-    } else if (bitsPerSample === 32) {
-      sample = view.getFloat32(bytePos, true);
-    } else if (bitsPerSample === 16) {
-      sample = view.getInt16(bytePos, true) / 32768;
+  const buffer = ctx.createBuffer(channels, numSamples, sampleRate);
+
+  for (let c = 0; c < channels; c++) {
+    const output = buffer.getChannelData(c);
+    for (let i = 0; i < numSamples; i++) {
+      const bytePos = dataOffset + (i * channels + c) * bytesPerSample;
+      if (bytePos + bytesPerSample > view.byteLength) break;
+
+      let sample = 0;
+      if (bitsPerSample === 24) {
+        // 24-bit signed integer
+        const b0 = view.getUint8(bytePos);
+        const b1 = view.getUint8(bytePos + 1);
+        const b2 = view.getUint8(bytePos + 2);
+        sample = ((b2 << 16) | (b1 << 8) | b0);
+        if (sample >= 0x800000) sample -= 0x1000000;
+        sample /= 0x800000;
+      } else if (bitsPerSample === 32) {
+        sample = view.getFloat32(bytePos, true);
+      } else if (bitsPerSample === 16) {
+        sample = view.getInt16(bytePos, true) / 32768;
+      }
+      output[i] = sample;
     }
-    output[i] = sample;
   }
-  
+
   return buffer;
 }
 

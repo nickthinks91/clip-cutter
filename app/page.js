@@ -764,6 +764,7 @@ export default function App() {
         const songName = name.replace(/\.[^.]+$/, '');
         const converted = await convertToWebAudio(af);
         const uploadFile = converted ? new File([converted.blob], songName + '.wav', { type: 'audio/wav' }) : af;
+        console.log('[BulkReplace]', name, '| converted:', converted ? `ok (${converted.buffer?.numberOfChannels}ch)` : 'null (raw fallback)', '| uploadFile:', uploadFile.name, uploadFile.type, uploadFile.size, 'bytes');
         await uploadAudio(uploadFile, song.id);
         replaced++;
       }

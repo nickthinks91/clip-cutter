@@ -333,6 +333,19 @@ export default function App() {
       const ctx = new (window.AudioContext || window.webkitAudioContext)(); actx.current = ctx;
       const resp = await fetch(url);
       const ab = await resp.arrayBuffer();
+      // Parse raw file header before decodeAudioData detaches the buffer
+      let fileHeader = null;
+      try {
+        const v = new DataView(ab);
+        const tag = String.fromCharCode(v.getUint8(0), v.getUint8(1), v.getUint8(2), v.getUint8(3));
+        if (tag === 'RIFF') {
+          fileHeader = { fmt: 'WAV', channels: v.getUint16(22, true), sampleRate: v.getUint32(24, true) };
+        } else if (tag === 'ID3\x03' || tag === 'ID3\x04' || (v.getUint8(0) === 0xFF && (v.getUint8(1) & 0xE0) === 0xE0)) {
+          fileHeader = { fmt: 'MP3', channels: null, sampleRate: null };
+        } else {
+          fileHeader = { fmt: tag.replace(/[^\x20-\x7E]/g, '?'), channels: null, sampleRate: null };
+        }
+      } catch {}
       let buf;
       try {
         buf = await ctx.decodeAudioData(ab.slice(0)); // slice to copy since decodeAudioData detaches
@@ -342,7 +355,7 @@ export default function App() {
       }
       if (!buf) throw new Error('Could not decode audio');
       abuf.current = buf;
-      setAudioBufInfo({ channels: buf.numberOfChannels, sampleRate: buf.sampleRate });
+      setAudioBufInfo({ channels: buf.numberOfChannels, sampleRate: buf.sampleRate, fileHeader });
       const res = analyzeAudio(buf); setAnalysis(res); setEnergy(res.energy); scoreFn.current = res.scoreClip;
       return res;
     } catch (e) { console.error(e); flash("Error loading audio"); return null; }
@@ -1083,7 +1096,7 @@ export default function App() {
             </div>; })()}
           </div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
-            <div><h2 style={{ fontSize: 17, fontWeight: 700, marginBottom: 2 }}>Team Review — {activeSongData?.name}</h2><p style={{ color: "#9B8B73", fontSize: 11, margin: 0 }}>{subs.length} submission{subs.length !== 1 ? "s" : ""} · updates live</p>{audioBufInfo && <p style={{ color: "#555", fontSize: 9, margin: "3px 0 0", fontFamily: "Fredoka, sans-serif", letterSpacing: 0.5 }}>Channels: {audioBufInfo.channels} | Sample rate: {audioBufInfo.sampleRate} Hz</p>}</div>
+            <div><h2 style={{ fontSize: 17, fontWeight: 700, marginBottom: 2 }}>Team Review — {activeSongData?.name}</h2><p style={{ color: "#9B8B73", fontSize: 11, margin: 0 }}>{subs.length} submission{subs.length !== 1 ? "s" : ""} · updates live</p>{audioBufInfo && <p style={{ color: "#555", fontSize: 9, margin: "3px 0 0", fontFamily: "monospace", letterSpacing: 0 }}>{audioBufInfo.fileHeader ? `File header: ${audioBufInfo.fileHeader.fmt} ${audioBufInfo.fileHeader.channels != null ? `${audioBufInfo.fileHeader.channels}ch ${audioBufInfo.fileHeader.sampleRate}Hz` : '(no ch info)'}` : 'File header: unknown'} | Decoded: {audioBufInfo.channels}ch {audioBufInfo.sampleRate}Hz</p>}</div>
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
               {songSelCount(activeSong) > 0 && <button onClick={exportSelected} style={{ ...bs(true), padding: "4px 12px", fontSize: 9, borderColor: "rgba(68,204,102,0.4)", color: "#44cc66" }}>⬇ Export Selected ({songSelCount(activeSong)})</button>}
               <button onClick={() => setSelectionMode(m => !m)} style={{ ...bs(selectionMode), padding: "4px 12px", fontSize: 9 }}>{selectionMode ? "✓ Selecting" : "Select"}</button>

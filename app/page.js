@@ -305,6 +305,8 @@ export default function App() {
   const [albumUploadProgress, setAlbumUploadProgress] = useState("");
   const [editingSongId, setEditingSongId] = useState(null);
   const [editingSongName, setEditingSongName] = useState("");
+  const [replaceAudioTarget, setReplaceAudioTarget] = useState(null);
+  const [replaceStatus, setReplaceStatus] = useState({});
   const [dirty, setDirty] = useState(false);
 
   // Load user from localStorage & songs from Supabase
@@ -720,6 +722,60 @@ export default function App() {
     flash(`${audioFiles.length} song${audioFiles.length > 1 ? 's' : ''} added!`);
   };
 
+  const handleReplaceAudio = async (songId, file) => {
+    if (!file || !songId) return;
+    setReplaceStatus(prev => ({ ...prev, [songId]: "uploading" }));
+    try {
+      const songName = file.name.replace(/\.[^.]+$/, "");
+      const converted = await convertToWebAudio(file);
+      const uploadFile = converted ? new File([converted.blob], songName + ".wav", { type: "audio/wav" }) : file;
+      await uploadAudio(uploadFile, songId);
+      const updated = await getAlbumSongs(activeAlbum);
+      setAlbumSongs(updated);
+      setReplaceStatus(prev => ({ ...prev, [songId]: "done" }));
+      setTimeout(() => setReplaceStatus(prev => { const n = { ...prev }; delete n[songId]; return n; }), 3000);
+    } catch (err) {
+      console.error(err);
+      setReplaceStatus(prev => ({ ...prev, [songId]: "error" }));
+    }
+  };
+
+  const handleBulkReplaceFromZip = async (file) => {
+    if (!file) return;
+    setAlbumUploading(true);
+    setAlbumUploadProgress("Extracting zip...");
+    try {
+      const JSZip = (await import('jszip')).default;
+      const zip = await JSZip.loadAsync(await file.arrayBuffer());
+      const entries = Object.values(zip.files).filter(e => !e.dir && /\.(mp3|wav|m4a|aac|ogg|flac)$/i.test(e.name));
+      let replaced = 0;
+      for (const entry of entries) {
+        const name = entry.name.split('/').pop();
+        const match = name.match(/^(\d+)/);
+        if (!match) continue;
+        const trackNum = parseInt(match[1], 10) - 1;
+        const song = albumSongs.find(s => s.track_number === trackNum);
+        if (!song) continue;
+        setAlbumUploadProgress(`Replacing ${song.name}...`);
+        const blob = await entry.async('blob');
+        const af = new File([blob], name, { type: 'audio/' + name.split('.').pop() });
+        const songName = name.replace(/\.[^.]+$/, '');
+        const converted = await convertToWebAudio(af);
+        const uploadFile = converted ? new File([converted.blob], songName + '.wav', { type: 'audio/wav' }) : af;
+        await uploadAudio(uploadFile, song.id);
+        replaced++;
+      }
+      const updated = await getAlbumSongs(activeAlbum);
+      setAlbumSongs(updated);
+      flash(`${replaced} track${replaced !== 1 ? 's' : ''} replaced!`);
+    } catch (err) {
+      console.error(err);
+      flash("Error replacing audio from zip");
+    }
+    setAlbumUploading(false);
+    setAlbumUploadProgress("");
+  };
+
   const loadAlbum = async (albumId) => {
     setActiveAlbum(albumId);
     const as = await getAlbumSongs(albumId);
@@ -914,7 +970,10 @@ export default function App() {
                 <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2 }}>Add songs to album</div>
                 <div style={{ fontSize: 9, color: "#9B8B73" }}>Select multiple files, or drop a .zip · MP3, WAV, M4A, AAC, OGG, FLAC</div>
                 <input id="fi-album" type="file" accept="audio/*,.zip" multiple onChange={handleAlbumUpload} style={{ display: "none" }} />
+                <input id="fi-replace-audio" type="file" accept="audio/*" onChange={e => { const f = e.target.files?.[0]; if (f && replaceAudioTarget) handleReplaceAudio(replaceAudioTarget, f); e.target.value = ""; }} style={{ display: "none" }} />
+                <input id="fi-replace-zip" type="file" accept=".zip" onChange={e => { const f = e.target.files?.[0]; if (f) handleBulkReplaceFromZip(f); e.target.value = ""; }} style={{ display: "none" }} />
               </div>
+              {albumSongs.length > 0 && !albumUploading && <button onClick={e => { e.stopPropagation(); document.getElementById("fi-replace-zip").click(); }} style={{ ...bs(false), fontSize: 9, marginTop: 8, width: "100%" }}>↻ Replace all audio (album zip)</button>}
               {albumUploading && <div style={{ textAlign: "center", padding: 12, marginTop: 8 }}>
                 <div style={{ width: 30, height: 30, border: "3px solid rgba(199,62,62,0.12)", borderTop: "3px solid #C73E3E", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 8px" }} />
                 <div style={{ fontSize: 11, color: "#C73E3E", fontFamily: "Fredoka, sans-serif" }}>{albumUploadProgress}</div>
@@ -936,7 +995,11 @@ export default function App() {
                   <div style={{ fontSize: 9, color: "#9B8B73", fontFamily: "Fredoka, sans-serif" }}>{song.duration > 0 ? fmt(song.duration) : "—"}</div>
                 </div>}
                 {isLeader && !isEditing && <button onClick={ev => { ev.stopPropagation(); setEditingSongId(song.id); setEditingSongName(song.name); }} style={{ background: "rgba(245,230,200,0.03)", border: "1px solid rgba(245,230,200,0.07)", color: "#9B8B73", fontSize: 8, padding: "3px 6px", borderRadius: 3, cursor: "pointer", fontFamily: "Fredoka, sans-serif", flexShrink: 0 }}>✏️</button>}
+                {isLeader && !isEditing && replaceStatus[song.id] !== "uploading" && <button onClick={ev => { ev.stopPropagation(); setReplaceAudioTarget(song.id); document.getElementById("fi-replace-audio").click(); }} style={{ background: "rgba(245,230,200,0.03)", border: "1px solid rgba(245,230,200,0.07)", color: "#9B8B73", fontSize: 8, padding: "3px 6px", borderRadius: 3, cursor: "pointer", fontFamily: "Fredoka, sans-serif", flexShrink: 0 }}>↻</button>}
                 {isLeader && <button onClick={ev => { ev.stopPropagation(); delSong(song.id); }} style={{ background: "rgba(199,62,62,0.05)", border: "1px solid rgba(199,62,62,0.1)", color: "#C73E3E", fontSize: 8, padding: "3px 6px", borderRadius: 4, cursor: "pointer", flexShrink: 0 }}>✕</button>}
+                {replaceStatus[song.id] === "uploading" && <span style={{ fontSize: 8, color: "#9B8B73", fontFamily: "Fredoka, sans-serif", flexShrink: 0 }}>Replacing…</span>}
+                {replaceStatus[song.id] === "done" && <span style={{ fontSize: 8, color: "#44cc66", fontFamily: "Fredoka, sans-serif", flexShrink: 0 }}>Replaced!</span>}
+                {replaceStatus[song.id] === "error" && <span style={{ fontSize: 8, color: "#C73E3E", fontFamily: "Fredoka, sans-serif", flexShrink: 0 }}>Error!</span>}
                 <div style={{ fontSize: 9, color: "#F5A623", fontFamily: "Fredoka, sans-serif", flexShrink: 0 }}>{isLeader ? "Review →" : isComplete ? "Done" : "Cut →"}</div>
               </div>;
             })}</div>

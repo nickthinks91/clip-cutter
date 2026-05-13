@@ -310,6 +310,7 @@ export default function App() {
   const [replaceStatus, setReplaceStatus] = useState({});
   const [bulkReplaceLog, setBulkReplaceLog] = useState([]);
   const [dirty, setDirty] = useState(false);
+  const [noteSummaries, setNoteSummaries] = useState({});
 
   // Load user from localStorage & songs from Supabase
   useEffect(() => {
@@ -683,6 +684,17 @@ export default function App() {
 
   const refreshSubs = async () => { if (!activeSong) return; const s = await getSubmissions(activeSong); setSubs(s); setConsensus(buildConsensus(s).map(c => norm59(c, analysis?.duration))); flash("Refreshed!"); };
   const handleSaveLeaderClips = async () => { if (!activeSong) return; await saveLeaderClips(activeSong, clips); setDirty(false); flash("Clips saved!"); };
+  const summarizeNotes = async (idx, songId, clusterKey, notes) => {
+    setNoteSummaries(prev => ({ ...prev, [idx]: { loading: true, error: null } }));
+    try {
+      const res = await fetch("/api/summarize-notes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ song_id: songId, cluster_key: clusterKey, notes }) });
+      const data = await res.json();
+      if (!res.ok) { setNoteSummaries(prev => ({ ...prev, [idx]: { loading: false, error: data.error || "Failed" } })); return; }
+      setNoteSummaries(prev => ({ ...prev, [idx]: { loading: false, summary_text: data.summary_text, member_names: data.member_names, note_count: data.note_count, error: null } }));
+    } catch (e) {
+      setNoteSummaries(prev => ({ ...prev, [idx]: { loading: false, error: e.message } }));
+    }
+  };
   const delSong = async id => { await dbDeleteSong(id); const allSongs = await getSongs(); setSongs(allSongs); if (activeAlbum) { const as = await getAlbumSongs(activeAlbum); setAlbumSongs(as); } };
 
   // ═══ ALBUM FUNCTIONS ═══
@@ -1146,15 +1158,19 @@ export default function App() {
           </div>
           {consensus.length > 0 && <div style={{ marginBottom: 24 }}>
             <div style={{ fontSize: 10, fontFamily: "Fredoka, sans-serif", color: "#44cc66", letterSpacing: 2, marginBottom: 8 }}>CONSENSUS CLIPS</div>
-            <div style={{ display: "grid", gap: 8 }}>{consensus.map((c, idx) => { const selPick = selectedPickByConsensus[idx]; const playStart = selPick != null ? selPick.startTime : c.startTime; const playEnd = selPick != null ? selPick.endTime : c.endTime; return <div key={idx} style={{ ...cs(false), borderColor: "rgba(68,204,102,0.2)" }}>
+            <div style={{ display: "grid", gap: 8 }}>{consensus.map((c, idx) => { const selPick = selectedPickByConsensus[idx]; const playStart = selPick != null ? selPick.startTime : c.startTime; const playEnd = selPick != null ? selPick.endTime : c.endTime; const clusterKey = `${Math.round(c.startTime*10)}_${Math.round(c.endTime*10)}`; const clusterNotes = c.picks.filter(p => p.notes && p.notes.trim()).map(p => ({ member_name: p.member, note_text: p.notes, clip_start: p.startTime, clip_end: p.endTime })); const distinctNoteMembers = [...new Set(clusterNotes.map(n => n.member_name))]; const hasMultiNotes = distinctNoteMembers.length >= 2; const nSum = noteSummaries[idx] || {}; return <div key={idx} style={{ ...cs(false), borderColor: "rgba(68,204,102,0.2)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
                 <div style={{ fontSize: 16, fontWeight: 800, color: "#44cc66" }}>C{idx + 1}</div>
                 <div style={{ flex: "1 1 150px", minWidth: 0 }}><div style={{ fontSize: 12, fontWeight: 600 }}>{fmt(c.startTime)} → {fmt(c.endTime)} <span style={{ color: "#9B8B73", fontWeight: 400 }}>({c.dur}s)</span></div><div style={{ fontSize: 10, color: "#9B8B73", marginTop: 2 }}>Picked by: {c.members.join(", ")}</div></div>
                 <div style={{ minWidth: 80 }}><AgreementBar count={c.memberCount} total={c.total} /></div>
                 {hasAudio && <button onClick={() => { if (playing && activeRange === `c${idx}`) stopPlay(); else playRange(playStart, Math.min(playStart + 59, analysis?.duration || abuf.current?.duration), `c${idx}`); }} style={{ width: 28, height: 28, borderRadius: "50%", background: playing && activeRange === `c${idx}` ? "linear-gradient(135deg,#C73E3E,#ff6644)" : "linear-gradient(135deg,#44cc66,#228844)", border: "none", color: "#fff", fontSize: 11, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{playing && activeRange === `c${idx}` ? "■" : "▶"}</button>}
                 {hasAudio && <button onClick={() => expRange(playStart, playEnd, `consensus${idx + 1}`)} style={{ ...bs(false), padding: "3px 8px", fontSize: 9, flexShrink: 0 }}>⬇</button>}
+                {hasMultiNotes && <span style={{ fontSize: 9, background: "rgba(245,166,35,0.12)", border: "1px solid rgba(245,166,35,0.25)", borderRadius: 4, padding: "2px 6px", color: "#F5A623", fontFamily: "Fredoka, sans-serif", flexShrink: 0 }}>🔥 {clusterNotes.length} notes</span>}
+                {hasMultiNotes && <button onClick={() => summarizeNotes(idx, activeSong, clusterKey, clusterNotes)} disabled={nSum.loading} style={{ ...bs(false), padding: "3px 8px", fontSize: 9, flexShrink: 0, opacity: nSum.loading ? 0.6 : 1 }}>{nSum.loading ? "…" : "Summarize notes"}</button>}
               </div>
               <div style={{ paddingLeft: 26, fontSize: 10, color: "#555", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "2px 0" }}>{c.picks.map((p, i) => { const active = selPick != null && selPick.startTime === p.startTime && selPick.endTime === p.endTime; const pk = `cp-${idx}-${p.member}-${p.startTime}`; return <span key={i} style={{ display: "inline-flex", alignItems: "center", marginRight: 10 }}>{selectionMode && <input type="checkbox" checked={isSel(activeSong, pk)} onChange={e => { e.stopPropagation(); toggleClipSel(activeSong, pk, { startTime: p.startTime, endTime: p.endTime, label: `${p.member}-pick` }); }} onClick={e => e.stopPropagation()} style={{ cursor: "pointer", accentColor: "#44cc66", marginRight: 4 }} />}<span onClick={() => setSelectedPickByConsensus(prev => ({ ...prev, [idx]: { startTime: p.startTime, endTime: p.endTime } }))} style={{ cursor: "pointer", fontWeight: active ? 700 : 400, background: active ? "rgba(68,204,102,0.15)" : "transparent", borderRadius: active ? 4 : 0, padding: active ? "1px 4px" : "1px 0", color: active ? "#44cc66" : "#555" }}>{p.member}: {fmt(p.startTime)}–{fmt(p.endTime)}</span></span>; })}{clips.filter(cl => !cl.isManual && c.picks.some(p => Math.abs(cl.startTime - p.startTime) <= 3)).map(cl => { const n = clips.indexOf(cl) + 1; const aiActive = selPick != null && selPick.startTime === cl.startTime && selPick.endTime === cl.endTime; const ak = `ca-${idx}-${n}-${cl.startTime}`; return <span key={`ai-${n}`} style={{ display: "inline-flex", alignItems: "center", marginRight: 10 }}>{selectionMode && <input type="checkbox" checked={isSel(activeSong, ak)} onChange={e => { e.stopPropagation(); toggleClipSel(activeSong, ak, { startTime: cl.startTime, endTime: cl.endTime, label: `ai${n}` }); }} onClick={e => e.stopPropagation()} style={{ cursor: "pointer", accentColor: "#F5A623", marginRight: 4 }} />}<span onClick={() => setSelectedPickByConsensus(prev => ({ ...prev, [idx]: { startTime: cl.startTime, endTime: cl.endTime } }))} style={{ cursor: "pointer", fontWeight: aiActive ? 700 : 400, background: aiActive ? "rgba(245,166,35,0.2)" : "transparent", borderRadius: aiActive ? 4 : 0, padding: aiActive ? "1px 4px" : "1px 0", color: "#F5A623" }}>AI #{n}: {fmt(cl.startTime)}–{fmt(cl.endTime)}</span></span>; })}</div>
+              {nSum.error && <div style={{ marginTop: 6, fontSize: 10, color: "#C73E3E", fontFamily: "Fredoka, sans-serif" }}>Summary failed — try again</div>}
+              {nSum.summary_text && <div style={{ marginTop: 8, border: "1px solid rgba(245,230,200,0.1)", borderRadius: 6, padding: "8px 10px", background: "rgba(245,230,200,0.02)" }}><div style={{ fontSize: 11, color: "#D4C4A8", lineHeight: 1.5 }}>{nSum.summary_text}</div><div style={{ fontSize: 9, color: "#9B8B73", marginTop: 4, fontFamily: "Fredoka, sans-serif" }}>{nSum.member_names?.join(", ")}</div></div>}
             </div>; })}</div>
           </div>}
           {hasAudio && <div style={{ marginBottom: 20 }}>

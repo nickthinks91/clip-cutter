@@ -311,6 +311,9 @@ export default function App() {
   const [bulkReplaceLog, setBulkReplaceLog] = useState([]);
   const [dirty, setDirty] = useState(false);
   const [noteSummaries, setNoteSummaries] = useState({});
+  const [memberUndoStack, setMemberUndoStack] = useState([]);
+  const memberDragActive = useRef(false);
+  const waveformWrapperRef = useRef(null);
 
   // Load user from localStorage & songs from Supabase
   useEffect(() => {
@@ -515,6 +518,33 @@ export default function App() {
   const revertClip = idx => { setClips(p => { const u = [...p], c = { ...u[idx] }; if (c.origStart == null) return p; c.startTime = c.origStart; c.endTime = c.origEnd; c.dur = Math.round(c.endTime - c.startTime); if (scoreFn.current) Object.assign(c, scoreFn.current(c.startTime, c.endTime)); u[idx] = c; return u; }); setDirty(true); };
   const isModified = c => !c.isManual && c.origStart != null && (Math.abs(c.startTime - c.origStart) > 0.5 || Math.abs(c.endTime - c.origEnd) > 0.5);
 
+  // ─── Member view: sub-second precision + undo ───
+  const memberCreateClip = (st, et) => {
+    setMemberUndoStack(prev => [...prev.slice(-19), [...clips]]);
+    const d = analysis?.duration || 300; const r = v => Math.round(v * 10) / 10;
+    let s = r(Math.max(0, st)), e = et !== null ? r(Math.min(d, et)) : r(Math.min(d, s + defDur));
+    if (e - s < 2) e = Math.min(d, s + defDur);
+    setClips(p => [...p, { startTime: s, endTime: e, id: `m${Date.now()}`, isManual: true, notes: "", dur: Math.round(e - s) }]);
+    setSel(clips.length);
+  };
+  const memberDragEdge = (idx, edge, t) => {
+    if (!memberDragActive.current) { memberDragActive.current = true; setMemberUndoStack(prev => [...prev.slice(-19), [...clips]]); }
+    setClips(p => { const u = [...p], c = { ...u[idx] }; const r = v => Math.round(v * 10) / 10; if (edge === "start") c.startTime = r(Math.min(t, c.endTime - 0.1)); else c.endTime = r(Math.max(t, c.startTime + 0.1)); c.dur = Math.round(c.endTime - c.startTime); u[idx] = c; return u; });
+  };
+  const memberMoveClip = (idx, ns, ne) => {
+    if (!memberDragActive.current) { memberDragActive.current = true; setMemberUndoStack(prev => [...prev.slice(-19), [...clips]]); }
+    setClips(p => { const u = [...p], c = { ...u[idx] }; const r = v => Math.round(v * 10) / 10; c.startTime = r(ns); c.endTime = r(ne); c.dur = Math.round(c.endTime - c.startTime); u[idx] = c; return u; });
+  };
+  const memberDelClip = idx => {
+    setMemberUndoStack(prev => [...prev.slice(-19), [...clips]]);
+    setClips(p => p.filter((_, i) => i !== idx));
+    if (sel >= idx && sel > 0) setSel(sel - 1);
+  };
+  const memberSetClipDur = (idx, nd) => {
+    setMemberUndoStack(prev => [...prev.slice(-19), [...clips]]);
+    setClips(p => { const u = [...p], c = { ...u[idx] }, d = analysis?.duration || 300; c.endTime = Math.min(d, c.startTime + nd); c.dur = Math.round(c.endTime - c.startTime); u[idx] = c; return u; });
+  };
+
   // Playback
   const playingClipRef = useRef(null);
   const stopPlay = () => { playGen.current++; if (src.current) try { src.current.onended = null; src.current.stop(); } catch (e) { } src.current = null; cancelAnimationFrame(af.current); setPlaying(false); setProgress(0); setPlayingFull(false); setFullProgress(0); setActiveRange(null); setPlayingClipIdx(null); setPlayheadPos(null); playingClipRef.current = null; };
@@ -667,7 +697,7 @@ export default function App() {
 
   const loadSubmit = async songId => {
     const song = songs.find(s => s.id === songId) || albumSongs.find(s => s.id === songId);
-    setActiveSong(songId); setClips([]); setSel(0); setZoom(null); setSubmitted(false); setSubmitError(null); setEnergy([]); setAnalysis(null); setPage("submit");
+    setActiveSong(songId); setClips([]); setSel(0); setZoom(null); setSubmitted(false); setSubmitError(null); setEnergy([]); setAnalysis(null); setPage("submit"); setMemberUndoStack([]);
     // Auto-stream audio if available
     if (song?.audio_path) {
       const url = getAudioUrl(song.audio_path);
@@ -915,6 +945,27 @@ export default function App() {
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
   }, [dirty, isLeader]);
+
+  // Reset member drag-active flag on any pointer release
+  useEffect(() => {
+    const onUp = () => { memberDragActive.current = false; };
+    document.addEventListener("mouseup", onUp);
+    document.addEventListener("touchend", onUp);
+    return () => { document.removeEventListener("mouseup", onUp); document.removeEventListener("touchend", onUp); };
+  }, []);
+
+  // Cmd/Ctrl+Z undo on member submit page
+  useEffect(() => {
+    if (page !== "submit" || isLeader) return;
+    const onKey = e => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        if (memberUndoStack.length > 0) { const p = memberUndoStack[memberUndoStack.length - 1]; setMemberUndoStack(s => s.slice(0, -1)); setClips(p); }
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [page, isLeader, memberUndoStack]);
 
   const bs = active => ({ background: active ? "rgba(245,166,35,0.12)" : "rgba(245,230,200,0.04)", border: `1px solid ${active ? "rgba(245,166,35,0.3)" : "rgba(245,230,200,0.08)"}`, color: active ? "#F5A623" : "#9B8B73", padding: "5px 12px", borderRadius: 6, fontSize: 11, cursor: "pointer", fontFamily: "Fredoka, sans-serif", transition: "all 0.2s", letterSpacing: "0.5px" });
   const cs = active => ({ background: active ? "rgba(245,166,35,0.05)" : "rgba(245,230,200,0.015)", border: `1px solid ${active ? "rgba(245,166,35,0.2)" : "rgba(245,230,200,0.05)"}`, borderRadius: 9, padding: "12px 14px", cursor: "pointer", transition: "all 0.2s" });
@@ -1216,24 +1267,30 @@ export default function App() {
           {audioLoading && <div style={{ textAlign: "center", padding: 30 }}><div style={{ width: 36, height: 36, border: "3px solid rgba(245,166,35,0.12)", borderTop: "3px solid #F5A623", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 12px" }} /><div style={{ fontSize: 12, color: "#9B8B73" }}>Loading song...</div></div>}
           {hasAudio && <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5, flexWrap: "wrap", gap: 4 }}>
-              <button onClick={() => createClip(lastTapTime || (playheadTime || 0), null)} style={{ background: "linear-gradient(135deg,rgba(245,166,35,0.15),rgba(245,166,35,0.05))", border: "1px solid rgba(245,166,35,0.3)", color: "#F5A623", fontSize: 11, fontWeight: 600, padding: "6px 14px", borderRadius: 6, cursor: "pointer", fontFamily: "Fredoka, sans-serif" }}>+ New Clip {lastTapTime > 0 || playheadTime ? `at ${fmt(lastTapTime || playheadTime || 0)}` : ""}</button>
+              <button onClick={() => memberCreateClip(lastTapTime || (playheadTime || 0), null)} style={{ background: "linear-gradient(135deg,rgba(245,166,35,0.15),rgba(245,166,35,0.05))", border: "1px solid rgba(245,166,35,0.3)", color: "#F5A623", fontSize: 11, fontWeight: 600, padding: "6px 14px", borderRadius: 6, cursor: "pointer", fontFamily: "Fredoka, sans-serif" }}>+ New Clip {lastTapTime > 0 || playheadTime ? `at ${fmt(lastTapTime || playheadTime || 0)}` : ""}</button>
               <div style={{ display: "flex", gap: 2 }}>{[15, 30, 60].map(d => <button key={d} onClick={() => setDefDur(d)} style={{ ...bs(defDur === d), padding: "2px 7px", fontSize: 9 }}>{d}s</button>)}</div>
             </div>
-            <Waveform energy={energy} duration={analysis.duration} clips={clips} highlights={[]} selClip={sel} onSel={setSel} onCreate={createClip} onEdge={dragEdge} onMove={moveClip} zoom={zoom || [0, analysis.duration]} onZoom={setZoom} readonly={false} onPlayFrom={t => { setLastTapTime(t); playFull(t); }} playheadTime={playheadTime} />
+            <div ref={waveformWrapperRef} style={{ position: "relative", marginTop: sel < clips.length ? 14 : 0 }}>
+              {sel < clips.length && (() => { const [zS, zE] = zoom || [0, analysis.duration]; const zD = zE - zS; const sPct = Math.max(0, Math.min(100, ((clips[sel].startTime - zS) / zD) * 100)); const ePct = Math.max(0, Math.min(100, ((clips[sel].endTime - zS) / zD) * 100)); const makeDown = edge => e => { e.stopPropagation(); e.preventDefault(); if (!memberDragActive.current) { memberDragActive.current = true; setMemberUndoStack(prev => [...prev.slice(-19), [...clips]]); } const czS = zS, czD = zD; const onMv = mv => { if (!waveformWrapperRef.current) return; const rect = waveformWrapperRef.current.getBoundingClientRect(); const t = czS + ((mv.clientX - rect.left) / rect.width) * czD; memberDragEdge(sel, edge, t); }; const onUp = () => { document.removeEventListener('pointermove', onMv); document.removeEventListener('pointerup', onUp); memberDragActive.current = false; }; document.addEventListener('pointermove', onMv); document.addEventListener('pointerup', onUp); }; const hs = { position: "absolute", top: -12, width: 18, height: 10, background: "rgba(245,166,35,0.85)", border: "1px solid rgba(245,166,35,0.5)", borderRadius: "3px 3px 0 0", cursor: "ew-resize", touchAction: "none", transform: "translateX(-50%)", zIndex: 5 }; return <><div style={{ ...hs, left: `${sPct}%` }} onPointerDown={makeDown("start")} /><div style={{ ...hs, left: `${ePct}%` }} onPointerDown={makeDown("end")} /></>; })()}
+              <Waveform energy={energy} duration={analysis.duration} clips={clips} highlights={[]} selClip={sel} onSel={setSel} onCreate={memberCreateClip} onEdge={memberDragEdge} onMove={memberMoveClip} zoom={zoom || [0, analysis.duration]} onZoom={setZoom} readonly={false} onPlayFrom={t => { setLastTapTime(t); playFull(t); }} playheadTime={playheadTime} />
+            </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, marginBottom: 4 }}>
               <button onClick={() => playFull(0)} style={{ width: 32, height: 32, borderRadius: "50%", background: playingFull ? "linear-gradient(135deg,#C73E3E,#ff6644)" : "linear-gradient(135deg,#F5A623,#0088aa)", border: "none", color: "#fff", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{playingFull ? "■" : "▶"}</button>
               <div style={{ flex: 1, height: 3, background: "rgba(245,230,200,0.06)", borderRadius: 2, overflow: "hidden" }}><div style={{ width: `${fullProgress * 100}%`, height: "100%", background: "linear-gradient(90deg,#F5A623,#C73E3E)", transition: "width 0.1s linear" }} /></div>
               <span style={{ fontSize: 10, fontFamily: "Fredoka, sans-serif", color: "#9B8B73" }}>{playheadTime != null ? fmt(playheadTime) : "0:00"} / {fmt(analysis.duration)}</span>
             </div>
-            <div style={{ fontSize: 9, fontFamily: "Fredoka, sans-serif", color: "#555", margin: "8px 0 6px", letterSpacing: 1 }}>YOUR PICKS ({clips.length}/5)</div>
+            <div style={{ display: "flex", alignItems: "center", margin: "8px 0 6px" }}>
+              <div style={{ fontSize: 9, fontFamily: "Fredoka, sans-serif", color: "#555", letterSpacing: 1 }}>YOUR PICKS ({clips.length}/5)</div>
+              {memberUndoStack.length > 0 && <button onClick={() => { const p = memberUndoStack[memberUndoStack.length - 1]; setMemberUndoStack(s => s.slice(0, -1)); setClips(p); }} style={{ ...bs(false), padding: "2px 8px", fontSize: 8, marginLeft: "auto" }}>↩ Undo</button>}
+            </div>
             {clips.length === 0 && <div style={{ textAlign: "center", padding: 20, border: "1px dashed rgba(245,230,200,0.06)", borderRadius: 8, marginBottom: 12 }}><div style={{ fontSize: 10, color: "#9B8B73" }}>Tap the waveform to set position, then tap "+ New Clip"</div></div>}
             <div style={{ display: "grid", gap: 6, marginBottom: 16 }}>{clips.map((c, idx) => <div key={c.id} onClick={() => setSel(idx)} style={{ ...cs(idx === sel) }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: "#F5A623", minWidth: 20 }}>✎</div>
                 <div style={{ flex: "1 1 120px", fontSize: 11, minWidth: 0 }}>{fmt(c.startTime)} → {fmt(c.endTime)} <span style={{ color: "#9B8B73" }}>({c.dur}s)</span></div>
-                <div style={{ display: "flex", gap: 2 }}>{[15, 30, 60].map(d => <button key={d} onClick={e => { e.stopPropagation(); setClipDur(idx, d); }} style={{ ...bs(c.dur === d), padding: "2px 5px", fontSize: 8 }}>{d}s</button>)}</div>
+                <div style={{ display: "flex", gap: 2 }}>{[15, 30, 60].map(d => <button key={d} onClick={e => { e.stopPropagation(); memberSetClipDur(idx, d); }} style={{ ...bs(c.dur === d), padding: "2px 5px", fontSize: 8 }}>{d}s</button>)}</div>
                 <button onClick={e => { e.stopPropagation(); playClip(idx); }} style={{ width: 26, height: 26, borderRadius: "50%", background: playing && sel === idx ? "linear-gradient(135deg,#C73E3E,#ff6644)" : "linear-gradient(135deg,#F5A623,#0088aa)", border: "none", color: "#fff", fontSize: 10, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{playing && sel === idx ? "■" : "▶"}</button>
-                {submitted ? <button onClick={e => { e.stopPropagation(); retractClip(idx); }} style={{ background: "rgba(212,148,28,0.08)", border: "1px solid rgba(212,148,28,0.2)", color: "#D4941C", fontSize: 8, padding: "3px 8px", borderRadius: 4, cursor: "pointer", fontFamily: "Fredoka, sans-serif" }}>Retract</button> : <button onClick={e => { e.stopPropagation(); delClip(idx); }} style={{ background: "rgba(199,62,62,0.05)", border: "1px solid rgba(199,62,62,0.1)", color: "#C73E3E", fontSize: 8, padding: "3px 6px", borderRadius: 4, cursor: "pointer" }}>✕</button>}
+                {submitted ? <button onClick={e => { e.stopPropagation(); retractClip(idx); }} style={{ background: "rgba(212,148,28,0.08)", border: "1px solid rgba(212,148,28,0.2)", color: "#D4941C", fontSize: 8, padding: "3px 8px", borderRadius: 4, cursor: "pointer", fontFamily: "Fredoka, sans-serif" }}>Retract</button> : <button onClick={e => { e.stopPropagation(); memberDelClip(idx); }} style={{ background: "rgba(199,62,62,0.05)", border: "1px solid rgba(199,62,62,0.1)", color: "#C73E3E", fontSize: 8, padding: "3px 6px", borderRadius: 4, cursor: "pointer" }}>✕</button>}
               </div>
               {idx === sel && <input type="text" placeholder="Add a note..." value={c.notes || ""} onChange={e => { e.stopPropagation(); updateNote(idx, e.target.value); }} onClick={e => e.stopPropagation()} style={{ width: "100%", marginTop: 6, background: "rgba(245,230,200,0.03)", border: "1px solid rgba(245,230,200,0.07)", borderRadius: 4, padding: "5px 8px", color: "#ccc", fontSize: 10, outline: "none", boxSizing: "border-box" }} />}
             </div>)}</div>

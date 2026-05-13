@@ -281,7 +281,7 @@ export default function App() {
   const [dl, setDl] = useState({}), [expIdx, setExpIdx] = useState(null);
   const [subs, setSubs] = useState([]), [consensus, setConsensus] = useState([]), [aiClips, setAiClips] = useState([]);
   const [showIndiv, setShowIndiv] = useState(true);
-  const [analyzing, setAnalyzing] = useState(false), [submitted, setSubmitted] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false), [submitted, setSubmitted] = useState(false), [submitError, setSubmitError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [shareLink, setShareLink] = useState(""), [linkSongName, setLinkSongName] = useState("");
   const [audioLoading, setAudioLoading] = useState(false);
@@ -592,8 +592,41 @@ export default function App() {
   };
 
   // Team
-  const submitMyPicks = async () => { if (!activeSong || clips.length < 2) return; await dbSubmitPicks(activeSong, user.name, clips.map(c => ({ startTime: c.startTime, endTime: c.endTime, notes: c.notes || "", dur: c.dur }))); setSubmitted(true); flash("Picks submitted!"); };
-  const retractClip = async (idx) => { const newClips = clips.filter((_, i) => i !== idx); setClips(newClips); if (sel >= idx && sel > 0) setSel(sel - 1); if (submitted && activeSong) { if (newClips.length > 0) { await dbSubmitPicks(activeSong, user.name, newClips.map(c => ({ startTime: c.startTime, endTime: c.endTime, notes: c.notes || "", dur: c.dur }))); flash("Clip retracted — submission updated"); } else { await dbSubmitPicks(activeSong, user.name, []); setSubmitted(false); flash("All clips retracted"); } } };
+  const submitMyPicks = async () => {
+    if (!activeSong || clips.length < 2) return;
+    setSubmitError(null);
+    try {
+      await dbSubmitPicks(activeSong, user.name, clips.map(c => ({ startTime: c.startTime, endTime: c.endTime, notes: c.notes || "", dur: c.dur })));
+      setSubmitted(true);
+      flash("Picks submitted!");
+    } catch (err) {
+      setSubmitError(err?.message || "Unknown error");
+    }
+  };
+  const retractClip = async (idx) => {
+    const prevClips = clips;
+    const prevSel = sel;
+    const newClips = clips.filter((_, i) => i !== idx);
+    setClips(newClips);
+    if (sel >= idx && sel > 0) setSel(sel - 1);
+    setSubmitError(null);
+    if (submitted && activeSong) {
+      try {
+        if (newClips.length > 0) {
+          await dbSubmitPicks(activeSong, user.name, newClips.map(c => ({ startTime: c.startTime, endTime: c.endTime, notes: c.notes || "", dur: c.dur })));
+          flash("Clip retracted — submission updated");
+        } else {
+          await dbSubmitPicks(activeSong, user.name, []);
+          setSubmitted(false);
+          flash("All clips retracted");
+        }
+      } catch (err) {
+        setClips(prevClips);
+        setSel(prevSel);
+        setSubmitError(err?.message || "Unknown error");
+      }
+    }
+  };
 
   const loadReview = async songId => {
     const song = songs.find(s => s.id === songId) || albumSongs.find(s => s.id === songId);
@@ -633,7 +666,7 @@ export default function App() {
 
   const loadSubmit = async songId => {
     const song = songs.find(s => s.id === songId) || albumSongs.find(s => s.id === songId);
-    setActiveSong(songId); setClips([]); setSel(0); setZoom(null); setSubmitted(false); setEnergy([]); setAnalysis(null); setPage("submit");
+    setActiveSong(songId); setClips([]); setSel(0); setZoom(null); setSubmitted(false); setSubmitError(null); setEnergy([]); setAnalysis(null); setPage("submit");
     // Auto-stream audio if available
     if (song?.audio_path) {
       const url = getAudioUrl(song.audio_path);
@@ -1190,6 +1223,7 @@ export default function App() {
             </div>)}</div>
             {submitted && <div style={{ background: "rgba(68,204,102,0.08)", border: "1px solid rgba(68,204,102,0.2)", borderRadius: 8, padding: "10px 14px", textAlign: "center", color: "#44cc66", fontSize: 13, fontWeight: 600, marginBottom: 8 }}>✓ Submitted! Retract individual clips above or add more below.</div>}
             {clips.length < 2 && !submitted && <div style={{ fontSize: 10, color: "#D4941C", fontFamily: "Fredoka, sans-serif", textAlign: "center", marginBottom: 6 }}>Add at least 2 clips to submit</div>}
+            {submitError && <div style={{ background: "rgba(199,62,62,0.1)", border: "1px solid rgba(199,62,62,0.35)", borderRadius: 8, padding: "10px 14px", textAlign: "center", color: "#C73E3E", fontSize: 12, fontWeight: 600, marginBottom: 8 }}>Save failed. Tap Submit again.{submitError !== "Unknown error" && <span style={{ fontWeight: 400, display: "block", fontSize: 10, marginTop: 3, opacity: 0.8 }}>{submitError}</span>}</div>}
             <button onClick={submitMyPicks} disabled={clips.length < 2} style={{ ...bs(clips.length >= 2), padding: "10px 24px", fontSize: 13, fontWeight: 600, opacity: clips.length < 2 ? 0.3 : 1, width: "100%", cursor: clips.length < 2 ? "not-allowed" : "pointer" }}>{submitted ? "Update Submission" : `Submit ${clips.length} Pick${clips.length !== 1 ? "s" : ""}`}</button>
           </div>}
         </div>}

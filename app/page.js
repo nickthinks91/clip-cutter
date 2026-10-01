@@ -624,17 +624,33 @@ export default function App() {
   };
 
   // Team
+  const draftKey = () => `cc-draft-${activeSong}-${user?.name}`;
   const submitMyPicks = async () => {
     if (!activeSong || clips.length < 2) return;
     setSubmitError(null);
+    const payload = clips.map(c => ({ startTime: c.startTime, endTime: c.endTime, notes: c.notes || "", dur: c.dur }));
+    try { localStorage.setItem(draftKey(), JSON.stringify(payload)); } catch (e2) {}
     try {
-      await dbSubmitPicks(activeSong, user.name, clips.map(c => ({ startTime: c.startTime, endTime: c.endTime, notes: c.notes || "", dur: c.dur })));
+      await dbSubmitPicks(activeSong, user.name, payload);
       setSubmitted(true);
+      try { localStorage.removeItem(draftKey()); } catch (e2) {}
       flash("Picks submitted!");
     } catch (err) {
-      setSubmitError(err?.message || "Unknown error");
+      setSubmitError("Couldn't save yet. Your picks are kept on this device and we keep retrying. " + (err?.message || ""));
     }
   };
+  // Keep a local draft of unsubmitted picks, and auto-retry a failed save
+  useEffect(() => {
+    if (page !== "submit" || !activeSong || !user?.name || submitted || !clips.length) return;
+    try { localStorage.setItem(`cc-draft-${activeSong}-${user.name}`, JSON.stringify(clips.map(c => ({ startTime: c.startTime, endTime: c.endTime, notes: c.notes || "", dur: c.dur })))); } catch (e2) {}
+  }, [clips, page, activeSong, submitted]);
+  useEffect(() => {
+    if (!submitError || submitted || page !== "submit") return;
+    const t = setInterval(() => { submitMyPicks(); }, 15000);
+    const on = () => submitMyPicks();
+    window.addEventListener("online", on);
+    return () => { clearInterval(t); window.removeEventListener("online", on); };
+  }, [submitError, submitted, page, clips, activeSong]);
   const retractClip = async (idx) => {
     const prevClips = clips;
     const prevSel = sel;
@@ -710,6 +726,11 @@ export default function App() {
     if (mine && mine.clips.length > 0) {
       setClips(mine.clips.map((c, i) => ({ ...c, id: `s${i}`, isManual: true, dur: Math.round(c.endTime - c.startTime) })));
       setSubmitted(true);
+    } else {
+      try {
+        const d = JSON.parse(localStorage.getItem(`cc-draft-${songId}-${user?.name}`) || "null");
+        if (Array.isArray(d) && d.length) { setClips(d.map((c, i) => ({ ...c, id: `d${i}`, isManual: true, dur: Math.round(c.endTime - c.startTime) }))); flash("Restored your unsaved picks"); }
+      } catch (e2) {}
     }
   };
 

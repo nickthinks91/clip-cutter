@@ -297,6 +297,7 @@ export default function App() {
   const [viralInfo, setViralInfo] = useState(null); // { matches, matchType, patterns, genre }
   const [selectedGenre, setSelectedGenre] = useState(null); // genre for viral intelligence
   const [albums, setAlbums] = useState([]);
+  const [listsLoaded, setListsLoaded] = useState(false), [loadFailed, setLoadFailed] = useState(false);
   const [activeAlbum, setActiveAlbum] = useState(null);
   const [albumSongs, setAlbumSongs] = useState([]);
   const [albumProgress, setAlbumProgress] = useState(null);
@@ -321,8 +322,17 @@ export default function App() {
     const saved = localStorage.getItem("cc-user");
     if (saved) setUser(JSON.parse(saved));
     setUserLoaded(true);
-    getSongs().then(setSongs).catch(console.error);
-    getAlbums().then(setAlbums).catch(console.error);
+    let stop = false;
+    (async () => {
+      for (let i = 0; !stop; i++) {
+        try {
+          const [sg, al] = await Promise.all([getSongs(), getAlbums()]);
+          if (stop) return;
+          setSongs(sg); setAlbums(al); setListsLoaded(true); setLoadFailed(false); return;
+        } catch (e) { console.error(e); setLoadFailed(true); await new Promise(r => setTimeout(r, Math.min(1000 * (i + 1), 6000))); }
+      }
+    })();
+    return () => { stop = true; };
   }, []);
 
   const flash = msg => { setNotice(msg); setTimeout(() => setNotice(null), 2500); };
@@ -1099,7 +1109,8 @@ export default function App() {
           </div>)}</div>
           </div>}
           
-          {albums.length === 0 && songs.length === 0 && !analyzing && <div style={{ textAlign: "center", padding: 40, border: "1px dashed rgba(245,230,200,0.06)", borderRadius: 12 }}><div style={{ fontSize: 28, opacity: 0.3, marginBottom: 8 }}>📂</div><div style={{ color: "#555", fontSize: 12 }}>{isLeader ? "Create an album or upload a song to get started" : "No assignments yet"}</div></div>}
+          {!listsLoaded && <div style={{ textAlign: "center", padding: 40, color: "#F5A623", fontSize: 12, fontFamily: "Fredoka, sans-serif" }}>{loadFailed ? "Couldn't load yet. Your work is safe. Retrying..." : "Loading..."}</div>}
+          {listsLoaded && albums.length === 0 && songs.length === 0 && !analyzing && <div style={{ textAlign: "center", padding: 40, border: "1px dashed rgba(245,230,200,0.06)", borderRadius: 12 }}><div style={{ fontSize: 28, opacity: 0.3, marginBottom: 8 }}>📂</div><div style={{ color: "#555", fontSize: 12 }}>{isLeader ? "Create an album or upload a song to get started" : "No assignments yet"}</div></div>}
         </div>}
 
         {/* ALBUM VIEW */}
@@ -1349,6 +1360,7 @@ export default function App() {
             {submitted && <div style={{ background: "rgba(68,204,102,0.08)", border: "1px solid rgba(68,204,102,0.2)", borderRadius: 8, padding: "10px 14px", textAlign: "center", color: "#44cc66", fontSize: 13, fontWeight: 600, marginBottom: 8 }}>✓ Submitted! Retract individual clips above or add more below.</div>}
             {clips.length < 2 && !submitted && <div style={{ fontSize: 10, color: "#D4941C", fontFamily: "Fredoka, sans-serif", textAlign: "center", marginBottom: 6 }}>Add at least 2 clips to submit</div>}
             {submitError && <div style={{ background: "rgba(199,62,62,0.1)", border: "1px solid rgba(199,62,62,0.35)", borderRadius: 8, padding: "10px 14px", textAlign: "center", color: "#C73E3E", fontSize: 12, fontWeight: 600, marginBottom: 8 }}>Save failed. Tap Submit again.{submitError !== "Unknown error" && <span style={{ fontWeight: 400, display: "block", fontSize: 10, marginTop: 3, opacity: 0.8 }}>{submitError}</span>}</div>}
+            {clips.length < 2 && <div style={{ fontSize: 11, color: "#F5A623", textAlign: "center", marginBottom: 6, fontFamily: "Fredoka, sans-serif" }}>Pick at least 2 clips to submit ({clips.length} so far). Your picks are saved on this device.</div>}
             <button onClick={submitMyPicks} disabled={clips.length < 2} style={{ ...bs(clips.length >= 2), padding: "10px 24px", fontSize: 13, fontWeight: 600, opacity: clips.length < 2 ? 0.3 : 1, width: "100%", cursor: clips.length < 2 ? "not-allowed" : "pointer" }}>{submitted ? "Update Submission" : `Submit ${clips.length} Pick${clips.length !== 1 ? "s" : ""}`}</button>
           </div>}
         </div>}

@@ -302,6 +302,7 @@ export default function App() {
   const [albumProgress, setAlbumProgress] = useState(null);
   const [albumTeamProgress, setAlbumTeamProgress] = useState({});
   const [newAlbumName, setNewAlbumName] = useState("");
+  const [uploadMode, setUploadMode] = useState("single");
   const [albumUploading, setAlbumUploading] = useState(false);
   const [albumUploadProgress, setAlbumUploadProgress] = useState("");
   const [editingSongId, setEditingSongId] = useState(null);
@@ -730,18 +731,39 @@ export default function App() {
   // ═══ ALBUM FUNCTIONS ═══
   const handleCreateAlbum = async () => {
     if (!newAlbumName.trim()) return;
-    const album = await createAlbum({ name: newAlbumName.trim(), genre: selectedGenre });
-    setAlbums(await getAlbums());
-    setNewAlbumName("");
-    setActiveAlbum(album.id);
-    setAlbumSongs([]);
-    setPage("album");
+    try {
+      const album = await createAlbum({ name: newAlbumName.trim(), genre: selectedGenre });
+      setAlbums(await getAlbums());
+      setNewAlbumName("");
+      setActiveAlbum(album.id);
+      setAlbumSongs([]);
+      setPage("album");
+    } catch (err) { console.error(err); flash("Couldn't create album: " + (err.message || "try again")); }
   };
 
-  const handleAlbumUpload = async (e) => {
-    const files = e.target?.files || e.dataTransfer?.files;
-    if (!files?.length || !activeAlbum) return;
-    e.preventDefault?.();
+  // Album mode: drop a zip or several songs, album gets created automatically
+  const handleQuickAlbum = async (e) => {
+    e.preventDefault();
+    const files = Array.from(e.target?.files || e.dataTransfer?.files || []);
+    if (e.target && e.target.value !== undefined) e.target.value = "";
+    if (!files.length) return;
+    const first = files[0].name.replace(/\.[^.]+$/, "");
+    const name = newAlbumName.trim() || (files.length === 1 && files[0].name.endsWith(".zip") ? first : "New Album " + new Date().toLocaleDateString());
+    try {
+      const album = await createAlbum({ name, genre: selectedGenre });
+      setNewAlbumName("");
+      setActiveAlbum(album.id);
+      setAlbumSongs([]);
+      setPage("album");
+      await handleAlbumUpload(null, album.id, files);
+    } catch (err) { console.error(err); flash("Couldn't create album: " + (err.message || "try again")); }
+  };
+
+  const handleAlbumUpload = async (e, forcedAlbumId, forcedFiles) => {
+    const albumId = forcedAlbumId || activeAlbum;
+    const files = forcedFiles || e?.target?.files || e?.dataTransfer?.files;
+    if (!files?.length || !albumId) return;
+    e?.preventDefault?.();
     setAlbumUploading(true);
 
     const audioFiles = [];
@@ -765,9 +787,10 @@ export default function App() {
 
     if (!audioFiles.length) { setAlbumUploading(false); flash("No audio files found"); return; }
 
-    const existingSongs = await getAlbumSongs(activeAlbum);
+    const existingSongs = await getAlbumSongs(albumId);
     let trackNum = existingSongs.length;
 
+    const failed = [];
     for (let i = 0; i < audioFiles.length; i++) {
       const af = audioFiles[i];
       setAlbumUploadProgress(`Converting & uploading ${i + 1}/${audioFiles.length}: ${af.name.replace(/\.[^.]+$/, '').slice(0, 35)}`);
@@ -788,7 +811,7 @@ export default function App() {
             const res = analyzeAudio(converted.buffer);
             bpm = res.bpm;
             // Save AI clips too since we already have the analysis
-            const song = await createSong({ name: songName, duration, bpm, shareLink: "", albumId: activeAlbum, trackNumber: trackNum });
+            const song = await createSong({ name: songName, duration, bpm, shareLink: "", albumId: albumId, trackNumber: trackNum });
             await uploadAudio(uploadFile, song.id);
             await saveAiClips(song.id, res.topClips.map(roundClip));
             trackNum++;
@@ -797,20 +820,20 @@ export default function App() {
         }
         
         // Fallback: upload without conversion/analysis
-        const song = await createSong({ name: songName, duration, bpm, shareLink: "", albumId: activeAlbum, trackNumber: trackNum });
+        const song = await createSong({ name: songName, duration, bpm, shareLink: "", albumId: albumId, trackNumber: trackNum });
         await uploadAudio(uploadFile, song.id);
         trackNum++;
-      } catch (ue) { console.error('Upload error for', af.name, ue); }
+      } catch (ue) { console.error('Upload error for', af.name, ue); failed.push(af.name); }
     }
 
-    await updateAlbum(activeAlbum, { track_count: trackNum });
-    const updatedSongs = await getAlbumSongs(activeAlbum);
+    await updateAlbum(albumId, { track_count: trackNum });
+    const updatedSongs = await getAlbumSongs(albumId);
     setAlbumSongs(updatedSongs);
     setSongs(await getSongs());
     setAlbums(await getAlbums());
     setAlbumUploading(false);
     setAlbumUploadProgress("");
-    flash(`${audioFiles.length} song${audioFiles.length > 1 ? 's' : ''} added!`);
+    flash(failed.length ? `${audioFiles.length - failed.length} added, ${failed.length} failed: ${failed.slice(0,3).join(', ')}` : `${audioFiles.length} song${audioFiles.length > 1 ? 's' : ''} added!`);
   };
 
   const handleReplaceAudio = async (songId, file) => {
@@ -992,8 +1015,11 @@ export default function App() {
         {page === "home" && <div>
           <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>{isLeader ? "Dashboard" : "Assigned Work"}</h2>
           
+          {isLeader && <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+            {[["single","Single"],["album","Album"]].map(([m, label]) => <button key={m} onClick={() => setUploadMode(m)} style={{ flex: 1, padding: "10px 12px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "Fredoka, sans-serif", background: uploadMode === m ? "rgba(245,166,35,0.15)" : "rgba(245,230,200,0.03)", border: `1px solid ${uploadMode === m ? "rgba(245,166,35,0.45)" : "rgba(245,230,200,0.08)"}`, color: uploadMode === m ? "#F5A623" : "#9B8B73" }}>{label}</button>)}
+          </div>}
           {/* LEADER: Create Album */}
-          {isLeader && <div style={{ marginBottom: 20 }}>
+          {isLeader && uploadMode === "album" && <div style={{ marginBottom: 20 }}>
             <div style={{ fontSize: 9, fontFamily: "Fredoka, sans-serif", color: "#555", marginBottom: 6, letterSpacing: 1 }}>CREATE ALBUM</div>
             <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
               <input type="text" value={newAlbumName} onChange={e => setNewAlbumName(e.target.value)} placeholder="Album name (e.g. Artist X - Untitled)" onKeyDown={e => { if (e.key === "Enter") handleCreateAlbum(); }} style={{ flex: 1, background: "rgba(245,230,200,0.04)", border: "1px solid rgba(245,230,200,0.1)", borderRadius: 8, padding: "10px 12px", color: "#F5E6C8", fontSize: 12, outline: "none" }} />
@@ -1008,6 +1034,11 @@ export default function App() {
                   padding: "4px 8px", borderRadius: 5, fontSize: 10, cursor: "pointer", fontFamily: "Fredoka, sans-serif"
                 }}>{icon} {g}</button>
               )}
+            </div>
+            <div onDrop={handleQuickAlbum} onDragOver={e => e.preventDefault()} onClick={() => document.getElementById("fi-quick-album").click()} style={{ border: "2px dashed rgba(199,62,62,0.25)", borderRadius: 12, padding: "16px 12px", textAlign: "center", cursor: "pointer", background: "rgba(199,62,62,0.02)", marginTop: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2 }}>Upload album</div>
+              <div style={{ fontSize: 9, color: "#9B8B73" }}>Pick a zip or several songs. Name is optional.</div>
+              <input id="fi-quick-album" type="file" accept="audio/*,.zip" multiple onChange={handleQuickAlbum} style={{ display: "none" }} />
             </div>
           </div>}
 
@@ -1026,7 +1057,7 @@ export default function App() {
           </div>}
 
           {/* STANDALONE SONGS (not in albums) */}
-          {isLeader && <div style={{ marginBottom: 20 }}>
+          {isLeader && uploadMode === "single" && <div style={{ marginBottom: 20 }}>
             <div style={{ fontSize: 9, fontFamily: "Fredoka, sans-serif", color: "#555", marginBottom: 6, letterSpacing: 1 }}>SINGLE SONGS</div>
             <div onDrop={handleUpload} onDragOver={e => e.preventDefault()} onClick={() => document.getElementById("fi2").click()} style={{ border: "2px dashed rgba(245,166,35,0.15)", borderRadius: 12, padding: "16px 12px", textAlign: "center", cursor: "pointer", background: "rgba(245,166,35,0.01)", marginBottom: 8 }}>
               <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 2 }}>Upload single song</div>

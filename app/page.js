@@ -143,7 +143,7 @@ function analyzeAudio(audioBuffer) {
 }
 
 /* ═══ CONSENSUS ═══ */
-function buildConsensus(submissions, threshold = 5) {
+function buildConsensus(submissions, threshold = 8, subgroupThreshold = 2) {
   const all = [];
   submissions.forEach(s => (s.clips || []).forEach(c => all.push({ ...c, startTime: Math.round(c.startTime), endTime: Math.round(c.endTime), member: s.member })));
   if (!all.length) return [];
@@ -156,20 +156,45 @@ function buildConsensus(submissions, threshold = 5) {
   }
   clusters.push(cur);
   return clusters.map(cl => {
-    const anchorStart = cl[0].startTime;
-    const byMember = {};
+    // one vote per member: first-pass dedup against earliest start (legacy anchor)
+    let byMember = {};
     cl.forEach(c => {
-      const dist = Math.abs(c.startTime - anchorStart);
+      const dist = Math.abs(c.startTime - cl[0].startTime);
       if (!byMember[c.member] || dist < byMember[c.member].dist) byMember[c.member] = { clip: c, dist };
     });
-    const picks = Object.values(byMember).map(v => v.clip);
-    const startTime = Math.min(...picks.map(c => c.startTime));
+    let picks = Object.values(byMember).map(v => v.clip);
+    // sub-consensus groups: member starts within <=2s of each other vote together
+    const byStart = {};
+    picks.forEach(c => { (byStart[c.startTime] = byStart[c.startTime] || []).push(c); });
+    const startsAsc = Object.keys(byStart).map(Number).sort((a, b) => a - b);
+    const subgroups = [];
+    let curSub = [startsAsc[0]];
+    for (let i = 1; i < startsAsc.length; i++) {
+      if (startsAsc[i] - curSub[0] <= subgroupThreshold) curSub.push(startsAsc[i]);
+      else { subgroups.push(curSub); curSub = [startsAsc[i]]; }
+    }
+    subgroups.push(curSub);
+    const subStarts = subgroups.map(sg => {
+      const count = sg.reduce((n, s) => n + byStart[s].length, 0);
+      let best = sg[0], bestN = 0;
+      sg.forEach(s => { if (byStart[s].length > bestN) { bestN = byStart[s].length; best = s; } });
+      return { startTime: best, count };
+    }).sort((a, b) => b.count - a.count || a.startTime - b.startTime);
+    // most common sub-consensus start wins; equal counts prompt a choice
+    const tied = subStarts.length > 1 && subStarts[1].count === subStarts[0].count;
+    const startTime = subStarts[0].startTime;
+    // second pass: re-dedup each member's pick by distance to the winning start
+    byMember = {};
+    cl.forEach(c => {
+      const dist = Math.abs(c.startTime - startTime);
+      if (!byMember[c.member] || dist < byMember[c.member].dist) byMember[c.member] = { clip: c, dist };
+    });
+    picks = Object.values(byMember).map(v => v.clip);
     const endTime = Math.max(...picks.map(c => c.endTime));
     const members = picks.map(c => c.member);
-    return { startTime, endTime, dur: Math.round(endTime - startTime), memberCount: members.length, members, total: submissions.length, agreement: members.length / submissions.length, picks };
+    return { startTime, endTime, dur: Math.round(endTime - startTime), memberCount: members.length, members, total: submissions.length, agreement: members.length / submissions.length, picks, tied, subStarts, tiedStarts: tied ? subStarts.filter(s => s.count === subStarts[0].count).map(s => s.startTime) : undefined };
   }).sort((a, b) => b.memberCount - a.memberCount);
 }
-
 const norm59 = (c, dur) => { const end = Math.min(c.startTime + 59, dur > 0 ? dur : c.startTime + 59); return { ...c, endTime: end, dur: Math.round(end - c.startTime) }; };
 const roundClip = c => ({ ...c, startTime: Math.round(c.startTime), endTime: Math.round(c.endTime) });
 
@@ -1271,6 +1296,10 @@ export default function App() {
                 {hasMultiNotes && <span style={{ fontSize: 9, background: "rgba(245,166,35,0.12)", border: "1px solid rgba(245,166,35,0.25)", borderRadius: 4, padding: "2px 6px", color: "#F5A623", fontFamily: "Fredoka, sans-serif", flexShrink: 0 }}>🔥 {clusterNotes.length} notes</span>}
                 {hasMultiNotes && <button onClick={() => summarizeNotes(idx, activeSong, clusterKey, clusterNotes)} disabled={nSum.loading} style={{ ...bs(false), padding: "3px 8px", fontSize: 9, flexShrink: 0, opacity: nSum.loading ? 0.6 : 1 }}>{nSum.loading ? "…" : "Summarize notes"}</button>}
               </div>
+              {c.subStarts && c.subStarts.length > 1 && <div style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap", marginBottom: 6, paddingLeft: 26 }}>
+                {c.tied && <span style={{ fontSize: 9, color: "#F5A623", fontFamily: "Fredoka, sans-serif" }}>Tie - choose a start:</span>}
+                {c.subStarts.map(ss => { const activeSt = selPick != null ? selPick.startTime : c.startTime; return <button key={ss.startTime} onClick={() => setSelectedPickByConsensus(prev => ({ ...prev, [idx]: { startTime: ss.startTime, endTime: Math.min(ss.startTime + 59, analysis?.duration || ss.startTime + 59) } }))} style={{ ...bs(activeSt === ss.startTime), padding: "2px 8px", fontSize: 9 }}>{fmt(ss.startTime)} · {ss.count} vote{ss.count !== 1 ? "s" : ""}</button>; })}
+              </div>}
               <div style={{ paddingLeft: 26, fontSize: 10, color: "#555", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "2px 0" }}>{c.picks.map((p, i) => { const active = selPick != null && selPick.startTime === p.startTime && selPick.endTime === p.endTime; const pk = `cp-${idx}-${p.member}-${p.startTime}`; return <span key={i} style={{ display: "inline-flex", alignItems: "center", marginRight: 10 }}>{selectionMode && <input type="checkbox" checked={isSel(activeSong, pk)} onChange={e => { e.stopPropagation(); toggleClipSel(activeSong, pk, { startTime: p.startTime, endTime: p.endTime, label: `${p.member}-pick` }); }} onClick={e => e.stopPropagation()} style={{ cursor: "pointer", accentColor: "#44cc66", marginRight: 4 }} />}<span onClick={() => setSelectedPickByConsensus(prev => ({ ...prev, [idx]: { startTime: p.startTime, endTime: p.endTime } }))} style={{ cursor: "pointer", fontWeight: active ? 700 : 400, background: active ? "rgba(68,204,102,0.15)" : "transparent", borderRadius: active ? 4 : 0, padding: active ? "1px 4px" : "1px 0", color: active ? "#44cc66" : "#555" }}>{p.member}: {fmt(p.startTime)}–{fmt(p.endTime)}</span></span>; })}{clips.filter(cl => !cl.isManual && c.picks.some(p => Math.abs(cl.startTime - p.startTime) <= 3)).map(cl => { const n = clips.indexOf(cl) + 1; const aiActive = selPick != null && selPick.startTime === cl.startTime && selPick.endTime === cl.endTime; const ak = `ca-${idx}-${n}-${cl.startTime}`; return <span key={`ai-${n}`} style={{ display: "inline-flex", alignItems: "center", marginRight: 10 }}>{selectionMode && <input type="checkbox" checked={isSel(activeSong, ak)} onChange={e => { e.stopPropagation(); toggleClipSel(activeSong, ak, { startTime: cl.startTime, endTime: cl.endTime, label: `ai${n}` }); }} onClick={e => e.stopPropagation()} style={{ cursor: "pointer", accentColor: "#F5A623", marginRight: 4 }} />}<span onClick={() => setSelectedPickByConsensus(prev => ({ ...prev, [idx]: { startTime: cl.startTime, endTime: cl.endTime } }))} style={{ cursor: "pointer", fontWeight: aiActive ? 700 : 400, background: aiActive ? "rgba(245,166,35,0.2)" : "transparent", borderRadius: aiActive ? 4 : 0, padding: aiActive ? "1px 4px" : "1px 0", color: "#F5A623" }}>AI #{n}: {fmt(cl.startTime)}–{fmt(cl.endTime)}</span></span>; })}</div>
               {nSum.error && <div style={{ marginTop: 6, fontSize: 10, color: "#C73E3E", fontFamily: "Fredoka, sans-serif" }}>Summary failed — try again</div>}
               {nSum.summary_text && <div style={{ marginTop: 8, border: "1px solid rgba(245,230,200,0.1)", borderRadius: 6, padding: "8px 10px", background: "rgba(245,230,200,0.02)" }}><div style={{ fontSize: 11, color: "#D4C4A8", lineHeight: 1.5 }}>{nSum.summary_text}</div><div style={{ fontSize: 9, color: "#9B8B73", marginTop: 4, fontFamily: "Fredoka, sans-serif" }}>{nSum.member_names?.join(", ")}</div></div>}

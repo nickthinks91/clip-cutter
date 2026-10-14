@@ -1,6 +1,21 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
-import { getSongs, createSong, deleteSong as dbDeleteSong, uploadAudio, getAudioUrl, saveAiClips, getAiClips, saveLeaderClips, getLeaderClips, submitPicks as dbSubmitPicks, getSubmissions, subscribeToSubmissions, findViralMatch, getViralPatterns, getTopViralSounds, getViralPositionPatterns, getAlbums, createAlbum, updateAlbum, deleteAlbum, getAlbumSongs, getAlbumProgress, getAlbumAllProgress, updateSong } from "../lib/supabase";
+import { getSongs as readSongs, createSong, deleteSong as dbDeleteSong, uploadAudio, getAudioUrl, saveAiClips, getAiClips, saveLeaderClips, getLeaderClips, submitPicks as dbSubmitPicks, getSubmissions, subscribeToSubmissions, findViralMatch, getViralPatterns, getTopViralSounds, getViralPositionPatterns, getAlbums, createAlbum, updateAlbum, deleteAlbum, getAlbumSongs as readAlbumSongs, getAlbumProgress, getAlbumAllProgress, updateSong } from "../lib/supabase";
+
+// Blue R34/V5 replaced a longer master. Keep its UI bounds tied to this audio,
+// without rewriting anyone's saved picks or changing other tracks.
+const BLUE_AUDIO_ID = "611aa382-59fa-4909-b256-d1e2eeb8f5ce";
+const BLUE_AUDIO_END = 178.1951979;
+const withAudioBounds = song => song?.id === BLUE_AUDIO_ID && song.name?.includes("(R34) V5")
+  ? { ...song, duration: BLUE_AUDIO_END } : song;
+const boundBlueClips = clips => clips.map(c => {
+  const startTime = Math.max(0, Math.min(BLUE_AUDIO_END, c.startTime));
+  const endTime = Math.max(startTime, Math.min(BLUE_AUDIO_END, c.endTime));
+  return { ...c, startTime, endTime, dur: Math.round(endTime - startTime) };
+}).filter(c => c.endTime > c.startTime);
+
+const getSongs = async () => (await readSongs()).map(withAudioBounds);
+const getAlbumSongs = async id => (await readAlbumSongs(id)).map(withAudioBounds);
 
 /* ═══ AUDIO CONVERSION ═══ */
 // Convert any audio file to a browser-friendly WAV (16-bit 44.1kHz mono)
@@ -299,7 +314,11 @@ export default function App() {
   const [analysis, setAnalysis] = useState(null), [energy, setEnergy] = useState([]);
   const actx = useRef(null), abuf = useRef(null), src = useRef(null), stT = useRef(0), af = useRef(null), scoreFn = useRef(null);
   const playGen = useRef(0);
-  const [clips, setClips] = useState([]), [sel, setSel] = useState(0);
+  const [clips, setRawClips] = useState([]), [sel, setSel] = useState(0);
+  const setClips = next => setRawClips(previous => {
+    const value = typeof next === "function" ? next(previous) : next;
+    return typeof next === "function" && activeSong === BLUE_AUDIO_ID ? boundBlueClips(value) : value;
+  });
   const [playing, setPlaying] = useState(false), [progress, setProgress] = useState(0);
   const [defDur, setDefDur] = useState(60), [zoom, setZoom] = useState(null);
   const [ab, setAb] = useState(null), [editNote, setEditNote] = useState(null);
@@ -602,9 +621,9 @@ export default function App() {
   };
 
   // Export
-  const expClip = async idx => { setExpIdx(idx); const cl = clips[idx]; if (!abuf.current || !cl) { setExpIdx(null); return; } const expEnd = Math.min(cl.startTime + 59, abuf.current.duration); const sr = abuf.current.sampleRate, ns = Math.floor((expEnd - cl.startTime) * sr); const oc = new OfflineAudioContext(abuf.current.numberOfChannels, ns, sr); const s = oc.createBufferSource(); s.buffer = abuf.current; s.connect(oc.destination); s.start(0, cl.startTime, expEnd - cl.startTime); const r = await oc.startRendering(); const blob = encodeWav(r); const url = URL.createObjectURL(blob), a = document.createElement("a"); a.href = url; a.download = `${(activeSongData?.name || "clip").replace(/\.[^.]+$/, "")}_clip${idx + 1}_${fmt(cl.startTime)}-${fmt(expEnd)}.wav`; a.click(); URL.revokeObjectURL(url); setDl(p => ({ ...p, [idx]: true })); setExpIdx(null); };
+  const expClip = async idx => { setExpIdx(idx); const cl = clips[idx]; if (!abuf.current || !cl || (activeSong === BLUE_AUDIO_ID && (cl.startTime < 0 || cl.startTime >= Math.min(BLUE_AUDIO_END, abuf.current.duration)))) { setExpIdx(null); return; } const expEnd = Math.min(cl.startTime + 59, abuf.current.duration); const sr = abuf.current.sampleRate, ns = Math.floor((expEnd - cl.startTime) * sr); const oc = new OfflineAudioContext(abuf.current.numberOfChannels, ns, sr); const s = oc.createBufferSource(); s.buffer = abuf.current; s.connect(oc.destination); s.start(0, cl.startTime, expEnd - cl.startTime); const r = await oc.startRendering(); const blob = encodeWav(r); const url = URL.createObjectURL(blob), a = document.createElement("a"); a.href = url; a.download = `${(activeSongData?.name || "clip").replace(/\.[^.]+$/, "")}_clip${idx + 1}_${fmt(cl.startTime)}-${fmt(expEnd)}.wav`; a.click(); URL.revokeObjectURL(url); setDl(p => ({ ...p, [idx]: true })); setExpIdx(null); };
   const expAll = async () => { for (let i = 0; i < clips.length; i++) { await expClip(i); await new Promise(r => setTimeout(r, 400)); } };
-  const expRange = async (st, et, label) => { if (!abuf.current) return; const expEnd = Math.min(st + 59, abuf.current.duration); const sr = abuf.current.sampleRate, ns = Math.floor((expEnd - st) * sr); const oc = new OfflineAudioContext(abuf.current.numberOfChannels, ns, sr); const s = oc.createBufferSource(); s.buffer = abuf.current; s.connect(oc.destination); s.start(0, st, expEnd - st); const r = await oc.startRendering(); const blob = encodeWav(r); const url = URL.createObjectURL(blob), a = document.createElement("a"); a.href = url; a.download = `${(activeSongData?.name || "clip").replace(/\.[^.]+$/, "")}_${label}.wav`; a.click(); URL.revokeObjectURL(url); };
+  const expRange = async (st, et, label) => { if (!abuf.current || (activeSong === BLUE_AUDIO_ID && (st < 0 || st >= Math.min(BLUE_AUDIO_END, abuf.current.duration)))) return; const expEnd = Math.min(st + 59, abuf.current.duration); const sr = abuf.current.sampleRate, ns = Math.floor((expEnd - st) * sr); const oc = new OfflineAudioContext(abuf.current.numberOfChannels, ns, sr); const s = oc.createBufferSource(); s.buffer = abuf.current; s.connect(oc.destination); s.start(0, st, expEnd - st); const r = await oc.startRendering(); const blob = encodeWav(r); const url = URL.createObjectURL(blob), a = document.createElement("a"); a.href = url; a.download = `${(activeSongData?.name || "clip").replace(/\.[^.]+$/, "")}_${label}.wav`; a.click(); URL.revokeObjectURL(url); };
 
   // Selection helpers
   const toggleClipSel = (songId, key, data) => setSelectionsBySong(prev => { const cur = { ...(prev[songId] || {}) }; if (cur[key]) delete cur[key]; else cur[key] = data; return { ...prev, [songId]: cur }; });
